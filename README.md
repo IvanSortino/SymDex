@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>Universal code-indexer MCP server for AI coding agents.</strong><br>
-  Claude · Cursor · GitHub Copilot · OpenCode · Any agent that speaks MCP.
+  Claude · Cursor · Codex CLI · Gemini CLI · GitHub Copilot · Windsurf · Zed · OpenCode · Any agent that speaks MCP.
 </p>
 
 <p align="center">
@@ -138,7 +138,7 @@ Every MCP tool is also available as a CLI command. Use SymDex without an AI agen
 Run SymDex as a local stdio server (default, for desktop agents) or as an HTTP server for remote access.
 
 ```bash
-symdex serve              # stdio — for Claude Desktop, Cursor, Copilot
+symdex serve              # stdio — for Claude, Cursor, Copilot, Gemini CLI, Codex CLI, etc.
 symdex serve --port 8080  # HTTP — for remote agents or services
 ```
 
@@ -169,16 +169,22 @@ SymDex parses source files using [tree-sitter](https://tree-sitter.github.io/tre
 
 ## Supported Platforms
 
-SymDex speaks the **Model Context Protocol (MCP)** — the open standard for connecting AI agents to external tools, created by Anthropic and now adopted across the AI tooling ecosystem. If a platform supports MCP, SymDex works with it.
+SymDex speaks the **Model Context Protocol (MCP)** — the open standard for connecting AI agents to external tools. If a platform supports MCP, SymDex works with it — no custom integration required.
 
-| Platform | MCP Support | How to Connect |
-|----------|-------------|---------------|
-| Claude Desktop | Native | Add to `claude_desktop_config.json` |
-| Cursor | Native | Add to `.cursor/mcp.json` |
-| GitHub Copilot in VS Code (agent mode) | Native | Add to `.vscode/mcp.json` |
-| Continue.dev (VS Code extension) | Native | Add to `config.json` |
-| OpenCode | Native | Add to `opencode.json` |
-| Any custom MCP client | Native | stdio or HTTP transport |
+| Platform | By | How to Connect |
+|----------|----|---------------|
+| Claude Desktop | Anthropic | Add to `claude_desktop_config.json` |
+| Claude Code | Anthropic | `claude mcp add symdex -- symdex serve` |
+| Codex CLI | OpenAI | Add to MCP settings |
+| Gemini CLI | Google | Add to MCP settings |
+| Cursor | Anysphere | Add to `.cursor/mcp.json` |
+| Windsurf | Codeium | Add to MCP settings |
+| GitHub Copilot (agent mode) | Microsoft | Add to `.vscode/mcp.json` |
+| Continue.dev | Continue | Add to `config.json` |
+| Cline | Cline | Add to MCP settings |
+| Zed | Zed Industries | Add to MCP settings |
+| OpenCode | OpenCode | Add to `opencode.json` |
+| Any custom MCP client | — | stdio or HTTP transport |
 
 ### Configuration (same pattern for all platforms)
 
