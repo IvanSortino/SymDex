@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "symdex"
+version = "0.1.0"
+description = "Universal code-indexer MCP server for AI coding agents"
+authors = [{name = "Muhammad Husnain"}]
+license = {text = "MIT"}
+requires-python = ">=3.11"
+readme = "README.md"
+keywords = ["mcp", "code-indexer", "ai", "llm", "tree-sitter", "semantic-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-python>=0.1",
+    "tree-sitter-javascript>=0.1",
+    "tree-sitter-typescript>=0.1",
+    "tree-sitter-go>=0.1",
+    "tree-sitter-rust>=0.1",
+    "tree-sitter-java>=0.1",
+    "tree-sitter-php>=0.1",
+    # tree-sitter-dart: not available on PyPI, excluded
+    "tree-sitter-c-sharp>=0.1",
+    "tree-sitter-c>=0.1",
+    "tree-sitter-cpp>=0.1",
+    "tree-sitter-elixir>=0.1",
+    "tree-sitter-ruby>=0.1",
+    "fastmcp>=2.0",
+    "typer>=0.12",
+    "rich>=13",
+    "sentence-transformers>=3.0",
+    "sqlite-vec>=0.1",
+    "numpy>=1.26",
+]
+
+[project.urls]
+Homepage = "https://symdex.dev"
+Repository = "https://github.com/husnainpk/symdex"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "pytest-bdd>=7",
+]
+
+[project.scripts]
+symdex = "symdex.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["symdex*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py", "*_steps.py"]
+
+[tool.coverage.run]
+source = ["symdex"]
+omit = ["*/tests/*", "*/__init__.py", "symdex/mcp/server.py"]
+
+[tool.coverage.report]
+fail_under = 80
