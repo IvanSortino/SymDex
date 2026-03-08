@@ -176,6 +176,7 @@ SymDex speaks the **Model Context Protocol (MCP)** — the open standard for con
 | Claude Desktop | Anthropic | Add to `claude_desktop_config.json` |
 | Claude Code | Anthropic | `claude mcp add symdex -- symdex serve` |
 | Codex CLI | OpenAI | Add to MCP settings |
+| Codex App | OpenAI | Add to MCP settings |
 | Gemini CLI | Google | Add to MCP settings |
 | Cursor | Anysphere | Add to `.cursor/mcp.json` |
 | Windsurf | Codeium | Add to MCP settings |
