@@ -4,12 +4,14 @@
 
 import json
 import os
+from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
+from symdex.core.watcher import watch as _watch_repo
 from symdex.core.storage import (
     get_connection,
     get_db_path,
@@ -308,6 +310,20 @@ def serve(
         mcp.run(transport="streamable-http", port=port)
     else:
         mcp.run()
+
+
+@app.command()
+def watch(
+    path: str = typer.Argument(..., help="Path to the directory to watch."),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Repo name (defaults to folder basename)."),
+    interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
+) -> None:
+    """Watch a directory and keep its index up to date automatically."""
+    console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) — Ctrl+C to stop")
+    try:
+        _watch_repo(path, name=name, interval=interval)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Watch stopped.[/yellow]")
 
 
 if __name__ == "__main__":
