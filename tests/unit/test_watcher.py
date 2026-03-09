@@ -114,3 +114,13 @@ def test_watch_removes_deleted_file(tmp_path):
     ).fetchall()
     conn.close()
     assert len(rows) == 0
+
+
+from typer.testing import CliRunner
+from symdex.cli import app
+
+def test_watch_cli_help():
+    runner = CliRunner()
+    result = runner.invoke(app, ["watch", "--help"])
+    assert result.exit_code == 0
+    assert "--interval" in result.output
