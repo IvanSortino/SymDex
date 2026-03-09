@@ -16,6 +16,7 @@ from symdex.mcp.tools import (
     get_symbols_tool,
     index_repo_tool,
     invalidate_cache_tool,
+    search_routes_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -76,6 +77,16 @@ def index_repo(name: str, path: str) -> dict:
 @mcp.tool(name="invalidate_cache", description="Force re-index of a repo or specific file on next call.")
 def invalidate_cache(repo: str, file: str | None = None) -> dict:
     return invalidate_cache_tool(repo=repo, file=file)
+
+
+@mcp.tool(name="search_routes", description="Find HTTP routes indexed from a repo. Filter by method or path substring.")
+def search_routes(
+    repo: str,
+    method: str | None = None,
+    path_contains: str | None = None,
+    limit: int = 50,
+) -> dict:
+    return search_routes_tool(repo=repo, method=method, path_contains=path_contains, limit=limit)
 
 
 if __name__ == "__main__":
