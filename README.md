@@ -16,6 +16,12 @@
   <strong>That is a 97% reduction — per lookup, every lookup.</strong>
 </p>
 
+<p align="center">
+  <strong>The part no other code indexer does:</strong><br>
+  Don't know the function name? <code>semantic_search("validate email addresses")</code> finds it anyway.<br>
+  No grep. No file reading. No guessing. One query, exact location.
+</p>
+
 ```bash
 pip install symdex
 ```
