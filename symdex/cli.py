@@ -4,18 +4,21 @@
 
 import json
 import os
+from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
+from symdex.core.watcher import watch as _watch_repo
 from symdex.core.storage import (
     get_connection,
     get_db_path,
     get_registry_path,  # noqa: F401 — imported for monkeypatching
     query_file_symbols,
     query_repos,
+    query_routes,
     search_text_in_index,
     upsert_repo,
 )
@@ -299,6 +302,34 @@ def invalidate(
 
 
 @app.command()
+def routes(
+    repo: str = typer.Argument(..., help="Repo name to query routes for."),
+    method: Optional[str] = typer.Option(None, "--method", "-m", help="Filter by HTTP method (GET, POST, ...)."),
+    path_contains: Optional[str] = typer.Option(None, "--path", "-p", help="Filter routes whose path contains this string."),
+) -> None:
+    """List HTTP routes indexed for a repo."""
+    db_path = get_db_path(repo)
+    conn = get_connection(db_path)
+    try:
+        rows = query_routes(conn, repo=repo, method=method, path_contains=path_contains)
+    finally:
+        conn.close()
+
+    if not rows:
+        console.print(f"[yellow]No routes indexed for repo '{repo}'.[/yellow]")
+        return
+
+    table = Table(title=f"Routes — {repo}", show_header=True, header_style="bold")
+    table.add_column("Method", style="cyan", width=8)
+    table.add_column("Path")
+    table.add_column("Handler")
+    table.add_column("File")
+    for r in rows:
+        table.add_row(r["method"], r["path"], r.get("handler") or "", r["file"])
+    console.print(table)
+
+
+@app.command()
 def serve(
     port: int = typer.Option(None, "--port", "-p", help="HTTP port (omit for stdio mode)"),
 ) -> None:
@@ -308,6 +339,20 @@ def serve(
         mcp.run(transport="streamable-http", port=port)
     else:
         mcp.run()
+
+
+@app.command()
+def watch(
+    path: str = typer.Argument(..., help="Path to the directory to watch."),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Repo name (defaults to folder basename)."),
+    interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
+) -> None:
+    """Watch a directory and keep its index up to date automatically."""
+    console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) — Ctrl+C to stop")
+    try:
+        _watch_repo(path, name=name, interval=interval)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Watch stopped.[/yellow]")
 
 
 if __name__ == "__main__":
