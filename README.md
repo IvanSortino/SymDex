@@ -271,8 +271,9 @@ SymDex parses source files using [tree-sitter](https://tree-sitter.github.io/tre
 | C++ | `.cpp` `.cc` `.h` |
 | Elixir | `.ex` `.exs` |
 | Ruby | `.rb` |
+| Vue | `.vue` |
 
-**12 languages.** More can be added by installing additional tree-sitter grammar packages.
+**13 languages.** More can be added by installing additional tree-sitter grammar packages.
 
 ---
 

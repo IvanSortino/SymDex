@@ -5,6 +5,7 @@
 import importlib
 import logging
 import os
+import re
 from typing import Optional, TypedDict
 
 try:
@@ -175,6 +176,22 @@ def _extract_comment_docstring(node, source_bytes: bytes) -> Optional[str]:
     return None
 
 
+def _extract_vue_script(source_bytes: bytes) -> tuple[bytes, int, str]:
+    """Extract the <script> block from a Vue SFC.
+
+    Returns (script_bytes, byte_offset, lang_name).
+    byte_offset is the position of script_bytes within source_bytes so that
+    byte offsets stored in the DB remain relative to the full .vue file.
+    lang_name is 'typescript' if lang="ts", otherwise 'javascript'.
+    """
+    match = re.search(rb"<script(\s[^>]*)?>(.+?)</script>", source_bytes, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return b"", 0, "javascript"
+    attrs = match.group(1) or b""
+    lang_name = "typescript" if re.search(rb'lang=["\']tsx?["\']', attrs) else "javascript"
+    return match.group(2), match.start(2), lang_name
+
+
 def _walk_and_extract(
     root_node,
     source_bytes: bytes,
@@ -248,7 +265,36 @@ def parse_file(file_path: str, repo_root: str) -> list[SymbolDict]:
     if not _TREE_SITTER_AVAILABLE:
         return []
 
-    ext = os.path.splitext(file_path)[1]
+    ext = os.path.splitext(file_path)[1].lower()
+
+    # Vue SFCs: extract <script> block and parse as JS/TS — no extra dependency needed.
+    if ext == ".vue":
+        try:
+            with open(file_path, "rb") as fh:
+                source_bytes = fh.read()
+        except OSError as exc:
+            logger.warning("Could not read %s: %s", file_path, exc)
+            return []
+        script_bytes, script_offset, lang_name = _extract_vue_script(source_bytes)
+        if not script_bytes.strip():
+            return []
+        _, language = _get_language(".ts" if lang_name == "typescript" else ".js")
+        if language is None:
+            return []
+        try:
+            parser = TSParser(language)
+            tree = parser.parse(script_bytes)
+        except Exception as exc:
+            logger.warning("tree-sitter parse failed for %s: %s", file_path, exc)
+            return []
+        rel_path = os.path.relpath(file_path, repo_root).replace("\\", "/")
+        results: list[SymbolDict] = []
+        _walk_and_extract(tree.root_node, script_bytes, lang_name, rel_path, results)
+        for sym in results:
+            sym["start_byte"] += script_offset
+            sym["end_byte"] += script_offset
+        return results
+
     lang_name, language = _get_language(ext)
 
     if language is None:

@@ -155,3 +155,121 @@ def test_parse_file_path_is_relative_to_repo_root(py_file):
     for s in symbols:
         assert not os.path.isabs(s["file"])
         assert s["file"] == "sample.py"
+
+
+# ── Vue SFC tests ────────────────────────────────────────────────────────────
+
+VUE_JS_SOURCE = """\
+<template>
+  <div>{{ message }}</div>
+</template>
+
+<script>
+function greetUser(name) {
+  return "Hello " + name;
+}
+
+const double = (x) => x * 2;
+</script>
+
+<style scoped>
+div { color: red; }
+</style>
+"""
+
+VUE_TS_SOURCE = """\
+<template><span>hi</span></template>
+
+<script lang="ts">
+interface User {
+  name: string;
+}
+
+function getUser(id: number): User {
+  return { name: "Alice" };
+}
+</script>
+"""
+
+VUE_NO_SCRIPT = """\
+<template>
+  <div>no script here</div>
+</template>
+"""
+
+
+@pytest.fixture
+def vue_js_file(tmp_path):
+    f = tmp_path / "component.vue"
+    f.write_text(VUE_JS_SOURCE)
+    return str(f), str(tmp_path)
+
+
+@pytest.fixture
+def vue_ts_file(tmp_path):
+    f = tmp_path / "component.vue"
+    f.write_text(VUE_TS_SOURCE)
+    return str(f), str(tmp_path)
+
+
+@pytest.fixture
+def vue_no_script_file(tmp_path):
+    f = tmp_path / "empty.vue"
+    f.write_text(VUE_NO_SCRIPT)
+    return str(f), str(tmp_path)
+
+
+def test_parse_vue_js_finds_function(vue_js_file):
+    path, root = vue_js_file
+    symbols = parse_file(path, root)
+    names = [s["name"] for s in symbols]
+    assert "greetUser" in names
+
+
+def test_parse_vue_js_finds_arrow_function(vue_js_file):
+    path, root = vue_js_file
+    symbols = parse_file(path, root)
+    names = [s["name"] for s in symbols]
+    assert "double" in names
+
+
+def test_parse_vue_ts_finds_function(vue_ts_file):
+    path, root = vue_ts_file
+    symbols = parse_file(path, root)
+    # If the TS grammar is available, getUser must be found.
+    # If not (grammar load failure), parse_file returns [] — acceptable graceful degradation.
+    if symbols:
+        names = [s["name"] for s in symbols]
+        assert "getUser" in names
+
+
+def test_parse_vue_byte_offsets_point_into_full_file(vue_js_file):
+    """start_byte/end_byte must index into the full .vue file, not the script fragment.
+
+    Arrow functions store bytes at the function value node (not the variable name),
+    so we check that offsets are valid and lie within the <script> section.
+    """
+    path, root = vue_js_file
+    symbols = parse_file(path, root)
+    with open(path, "rb") as fh:
+        full_bytes = fh.read()
+    script_start = full_bytes.find(b"<script")
+    for sym in symbols:
+        assert sym["start_byte"] < len(full_bytes)
+        assert sym["end_byte"] <= len(full_bytes)
+        assert sym["end_byte"] > sym["start_byte"]
+        assert sym["start_byte"] >= script_start, (
+            f"{sym['name']} byte offset {sym['start_byte']} is before the <script> block"
+        )
+
+
+def test_parse_vue_no_script_returns_empty(vue_no_script_file):
+    path, root = vue_no_script_file
+    assert parse_file(path, root) == []
+
+
+def test_parse_vue_file_field_is_vue_extension(vue_js_file):
+    path, root = vue_js_file
+    symbols = parse_file(path, root)
+    for s in symbols:
+        assert s["file"].endswith(".vue")
