@@ -44,3 +44,18 @@ CREATE TABLE IF NOT EXISTS repos (
     db_path      TEXT NOT NULL UNIQUE,
     last_indexed DATETIME
 );
+
+CREATE TABLE IF NOT EXISTS routes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo        TEXT NOT NULL,
+    file        TEXT NOT NULL,
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    handler     TEXT,
+    start_byte  INTEGER NOT NULL,
+    end_byte    INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_routes_repo ON routes(repo);
+CREATE INDEX IF NOT EXISTS idx_routes_repo_path ON routes(repo, path);
+CREATE INDEX IF NOT EXISTS idx_routes_method ON routes(repo, method);
