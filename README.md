@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>Universal code-indexer MCP server for AI coding agents.</strong><br>
-  MCP client · Cursor · Codex CLI · Gemini CLI · GitHub Copilot · Windsurf · Zed · OpenCode · Any agent that speaks MCP.
+  MCP client · Cursor · Codex CLI · Gemini CLI · GitHub Copilot · Windsurf · Kilo Code · Zed · OpenCode · Any agent that speaks MCP.
 </p>
 
 <p align="center">
@@ -426,6 +426,7 @@ SymDex speaks the **Model Context Protocol (MCP)** — the open standard for con
 | GitHub Copilot (agent mode) | Microsoft | Add to `.vscode/mcp.json` |
 | Continue.dev | Continue | Add to `config.json` |
 | Cline | Cline | Add to MCP settings |
+| Kilo Code | Kilo Code | Add to VS Code `settings.json` under `kilocode.mcpServers` |
 | Zed | Zed Industries | Add to MCP settings |
 | OpenCode | OpenCode | Add to `opencode.json` |
 | Any custom MCP client | — | stdio or HTTP transport |
