@@ -170,6 +170,7 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
                 _ROUTE_LANG_MAP = {
                     ".py": "python", ".js": "javascript", ".ts": "typescript",
                     ".jsx": "javascript", ".tsx": "typescript",
+                    ".php": "php",
                 }
                 file_lang = _ROUTE_LANG_MAP.get(ext)
                 if file_lang:

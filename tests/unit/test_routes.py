@@ -69,6 +69,24 @@ router.post("/products", createProduct);
 app.delete("/products/:id", deleteProduct);
 '''
 
+TS_EXPRESS_INLINE_SOURCE = b'''
+import express from "express";
+const app = express();
+
+app.get("/health", async (req, res) => {
+  res.json({ ok: true });
+});
+'''
+
+LARAVEL_SOURCE = b'''
+<?php
+use Illuminate\\Support\\Facades\\Route;
+
+Route::get('/users', [UserController::class, 'index']);
+Route::post('/users', 'UserController@store');
+Route::match(['put', 'patch'], '/users/{id}', [UserController::class, 'update']);
+'''
+
 
 def test_flask_route_detected():
     routes = extract_routes(FLASK_SOURCE, "app.py", "python")
@@ -128,6 +146,22 @@ def test_express_delete():
     routes = extract_routes(EXPRESS_SOURCE, "routes.js", "javascript")
     deletes = [r for r in routes if r.method == "DELETE"]
     assert len(deletes) == 1
+
+
+def test_typescript_inline_handler_route():
+    routes = extract_routes(TS_EXPRESS_INLINE_SOURCE, "routes.ts", "typescript")
+    health = [r for r in routes if r.path == "/health" and r.method == "GET"]
+    assert len(health) == 1
+    assert health[0].handler == "<inline>"
+
+
+def test_laravel_routes_detected():
+    routes = extract_routes(LARAVEL_SOURCE, "routes/web.php", "php")
+    methods_paths = {(r.method, r.path) for r in routes}
+    assert ("GET", "/users") in methods_paths
+    assert ("POST", "/users") in methods_paths
+    assert ("PUT", "/users/{id}") in methods_paths
+    assert ("PATCH", "/users/{id}") in methods_paths
 
 
 def test_route_info_has_bytes():
@@ -228,3 +262,40 @@ def test_index_folder_extracts_routes(tmp_path):
     routes = query_routes(conn, repo="flask_test")
     conn.close()
     assert any(r["path"] == "/hello" for r in routes)
+
+
+def test_index_folder_extracts_laravel_routes(tmp_path):
+    """index_folder should populate routes table for Laravel route files."""
+    from unittest.mock import patch
+
+    repo_dir = tmp_path / "laravel_app"
+    routes_dir = repo_dir / "routes"
+    routes_dir.mkdir(parents=True)
+    (routes_dir / "web.php").write_text(
+        "<?php\n"
+        "use Illuminate\\Support\\Facades\\Route;\n\n"
+        "Route::get('/users', [UserController::class, 'index']);\n"
+        "Route::post('/users', 'UserController@store');\n"
+    )
+
+    from symdex.core.indexer import index_folder
+    from symdex.core.storage import get_connection, query_routes
+
+    db_path_store = {}
+
+    def fake_db_path(repo):
+        p = str(tmp_path / f"{repo}.db")
+        db_path_store[repo] = p
+        return p
+
+    with patch("symdex.core.indexer.get_db_path", fake_db_path), \
+         patch("symdex.core.storage.get_db_path", fake_db_path), \
+         patch("symdex.search.semantic.embed_text", return_value=[0.0] * 384):
+        index_folder(str(repo_dir), name="laravel_test")
+
+    conn = get_connection(db_path_store["laravel_test"])
+    routes = query_routes(conn, repo="laravel_test")
+    conn.close()
+    methods_paths = {(r["method"], r["path"]) for r in routes}
+    assert ("GET", "/users") in methods_paths
+    assert ("POST", "/users") in methods_paths

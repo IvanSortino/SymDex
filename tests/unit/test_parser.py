@@ -32,6 +32,35 @@ function greet(name) {
 const double = (x) => x * 2;
 '''
 
+TS_SOURCE = '''\
+interface User {
+    name: string;
+}
+
+class AuthService {
+    login(email: string): boolean {
+        return email.includes("@");
+    }
+}
+
+function validateEmail(email: string): boolean {
+    return email.includes("@");
+}
+'''
+
+PHP_SOURCE = '''\
+<?php
+class UserController {
+    public function index() {
+        return [];
+    }
+}
+
+function helper_fn($x) {
+    return $x;
+}
+'''
+
 SYNTAX_ERROR_SOURCE = '''\
 def broken(:
     pass
@@ -56,6 +85,20 @@ def py_no_doc_file(tmp_path):
 def js_file(tmp_path):
     f = tmp_path / "sample.js"
     f.write_text(JS_SOURCE)
+    return str(f), str(tmp_path)
+
+
+@pytest.fixture
+def ts_file(tmp_path):
+    f = tmp_path / "sample.ts"
+    f.write_text(TS_SOURCE)
+    return str(f), str(tmp_path)
+
+
+@pytest.fixture
+def php_file(tmp_path):
+    f = tmp_path / "sample.php"
+    f.write_text(PHP_SOURCE)
     return str(f), str(tmp_path)
 
 
@@ -132,6 +175,22 @@ def test_parse_javascript_arrow_function(js_file):
     symbols = parse_file(path, root)
     names = [s["name"] for s in symbols]
     assert "double" in names
+
+
+def test_parse_typescript_symbols(ts_file):
+    path, root = ts_file
+    symbols = parse_file(path, root)
+    names = [s["name"] for s in symbols]
+    assert "validateEmail" in names
+    assert "AuthService" in names
+
+
+def test_parse_php_symbols(php_file):
+    path, root = php_file
+    symbols = parse_file(path, root)
+    names = [s["name"] for s in symbols]
+    assert "helper_fn" in names
+    assert "UserController" in names
 
 
 def test_parse_syntax_error_returns_empty_list(syntax_error_file):
