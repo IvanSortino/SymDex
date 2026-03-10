@@ -18,27 +18,27 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Map file extension → (language_name, grammar_module)
-_EXT_MAP: dict[str, tuple[str, str]] = {
-    ".py":   ("python",     "tree_sitter_python"),
-    ".js":   ("javascript", "tree_sitter_javascript"),
-    ".mjs":  ("javascript", "tree_sitter_javascript"),
-    ".ts":   ("typescript", "tree_sitter_typescript"),
-    ".tsx":  ("typescript", "tree_sitter_typescript"),
-    ".go":   ("go",         "tree_sitter_go"),
-    ".rs":   ("rust",       "tree_sitter_rust"),
-    ".java": ("java",       "tree_sitter_java"),
-    ".php":  ("php",        "tree_sitter_php"),
-    ".cs":   ("c_sharp",    "tree_sitter_c_sharp"),
-    ".c":    ("c",          "tree_sitter_c"),
-    ".h":    ("cpp",        "tree_sitter_cpp"),
-    ".cpp":  ("cpp",        "tree_sitter_cpp"),
-    ".cc":   ("cpp",        "tree_sitter_cpp"),
-    ".ex":   ("elixir",     "tree_sitter_elixir"),
-    ".exs":  ("elixir",     "tree_sitter_elixir"),
-    ".rb":   ("ruby",       "tree_sitter_ruby"),
+# Map file extension -> (language_name, grammar_module, preferred_loader_attr)
+_EXT_MAP: dict[str, tuple[str, str, Optional[str]]] = {
+    ".py":   ("python",     "tree_sitter_python", None),
+    ".js":   ("javascript", "tree_sitter_javascript", None),
+    ".jsx":  ("javascript", "tree_sitter_javascript", None),
+    ".mjs":  ("javascript", "tree_sitter_javascript", None),
+    ".ts":   ("typescript", "tree_sitter_typescript", "language_typescript"),
+    ".tsx":  ("typescript", "tree_sitter_typescript", "language_tsx"),
+    ".go":   ("go",         "tree_sitter_go", None),
+    ".rs":   ("rust",       "tree_sitter_rust", None),
+    ".java": ("java",       "tree_sitter_java", None),
+    ".php":  ("php",        "tree_sitter_php", "language_php"),
+    ".cs":   ("c_sharp",    "tree_sitter_c_sharp", None),
+    ".c":    ("c",          "tree_sitter_c", None),
+    ".h":    ("cpp",        "tree_sitter_cpp", None),
+    ".cpp":  ("cpp",        "tree_sitter_cpp", None),
+    ".cc":   ("cpp",        "tree_sitter_cpp", None),
+    ".ex":   ("elixir",     "tree_sitter_elixir", None),
+    ".exs":  ("elixir",     "tree_sitter_elixir", None),
+    ".rb":   ("ruby",       "tree_sitter_ruby", None),
 }
-
 # node_type → kind mapping per language
 _NODE_KINDS: dict[str, dict[str, str]] = {
     "python": {
@@ -118,10 +118,31 @@ def _get_language(ext: str):
     entry = _EXT_MAP.get(ext.lower())
     if not entry:
         return None, None
-    lang_name, module_name = entry
+    lang_name, module_name, preferred_loader = entry
     try:
         mod = importlib.import_module(module_name)
-        language = Language(mod.language())
+        loader_candidates = []
+        if preferred_loader:
+            loader_candidates.append(preferred_loader)
+        loader_candidates.extend(
+            [
+                "language",
+                f"language_{lang_name}",
+                "language_typescript",
+                "language_php",
+                "language_php_only",
+            ]
+        )
+        language = None
+        for attr in dict.fromkeys(loader_candidates):
+            fn = getattr(mod, attr, None)
+            if callable(fn):
+                language = Language(fn())
+                break
+        if language is None:
+            raise AttributeError(
+                f"No supported language loader found in module {module_name}"
+            )
         return lang_name, language
     except Exception as exc:
         logger.warning("Could not load grammar %s: %s", module_name, exc)
@@ -133,6 +154,13 @@ def _extract_name(node, source_bytes: bytes) -> Optional[str]:
     name_node = node.child_by_field_name("name")
     if name_node:
         return source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+    # Fallback for grammars where definitions don't expose a "name" field.
+    stack = list(node.children)
+    while stack:
+        child = stack.pop(0)
+        if child.type in ("identifier", "type_identifier", "field_identifier", "constant"):
+            return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+        stack.extend(list(child.children))
     return None
 
 
@@ -175,6 +203,34 @@ def _extract_comment_docstring(node, source_bytes: bytes) -> Optional[str]:
         return source_bytes[prev.start_byte:prev.end_byte].decode("utf-8", errors="replace").strip()
     return None
 
+def _extract_elixir_symbol(node, source_bytes: bytes) -> Optional[tuple[str, str]]:
+    """Extract (kind, name) for Elixir def/defp/defmodule calls."""
+    if node.type != "call" or not node.children:
+        return None
+    head = node.children[0]
+    if head.type != "identifier":
+        return None
+    macro = source_bytes[head.start_byte:head.end_byte].decode("utf-8", errors="replace")
+    kind = {"def": "function", "defp": "function", "defmodule": "class"}.get(macro)
+    if kind is None:
+        return None
+    args = next((c for c in node.children if c.type == "arguments"), None)
+    if args is None:
+        return None
+    target = next((c for c in args.children if c.is_named), None)
+    if target is None:
+        return None
+    if target.type == "call":
+        name_node = next((c for c in target.children if c.type in ("identifier", "alias", "constant")), None)
+    elif target.type in ("alias", "identifier", "constant"):
+        name_node = target
+    else:
+        name_node = None
+    if name_node is None:
+        return None
+    name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+    return kind, name
+
 
 def _extract_vue_script(source_bytes: bytes) -> tuple[bytes, int, str]:
     """Extract the <script> block from a Vue SFC.
@@ -206,6 +262,22 @@ def _walk_and_extract(
     while stack:
         node = stack.pop()
         node_type = node.type
+
+        if lang_name == "elixir" and node_type == "call":
+            extracted = _extract_elixir_symbol(node, source_bytes)
+            if extracted:
+                kind, name = extracted
+                results.append({
+                    "name": name,
+                    "file": rel_path,
+                    "kind": kind,
+                    "start_byte": node.start_byte,
+                    "end_byte": node.end_byte,
+                    "signature": _extract_signature(node, source_bytes),
+                    "docstring": _extract_comment_docstring(node, source_bytes),
+                })
+            stack.extend(reversed(node.children))
+            continue
 
         # JS/TS: arrow functions assigned to const/let/var
         if lang_name in ("javascript", "typescript") and node_type == "variable_declarator":
@@ -318,3 +390,4 @@ def parse_file(file_path: str, repo_root: str) -> list[SymbolDict]:
     results: list[SymbolDict] = []
     _walk_and_extract(tree.root_node, source_bytes, lang_name, rel_path, results)
     return results
+

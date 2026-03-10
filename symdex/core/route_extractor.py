@@ -2,7 +2,7 @@
 # This file is part of SymDex.
 # License: See LICENSE file in the project root.
 
-"""Regex-based HTTP route extractor for Python and JavaScript/TypeScript source files."""
+"""Regex-based HTTP route extractor for Python, JS/TS, and Laravel PHP files."""
 
 import re
 from dataclasses import dataclass
@@ -41,9 +41,27 @@ _PY_DJANGO = re.compile(
 
 # ── JavaScript / TypeScript patterns ─────────────────────────────────────────
 
-# app.get("/path", handler) / router.post("/path", handler)
+# app.get("/path", handler) / router.post("/path", controller.list)
 _JS_METHOD = re.compile(
-    rb"""\b\w+\.(get|post|put|delete|patch|head|options|all)\(\s*["'`]([^"'`]+)["'`]\s*,\s*(\w+)""",
+    rb"""\b\w+\.(get|post|put|delete|patch|head|options|all)\(\s*["'`]([^"'`]+)["'`]\s*,\s*(?!async\b)([\w.$]+)""",
+    re.IGNORECASE,
+)
+
+# app.get("/path", async (req, res) => {}) / app.get("/path", function (...) {})
+_JS_INLINE = re.compile(
+    rb"""\b\w+\.(get|post|put|delete|patch|head|options|all)\(\s*["'`]([^"'`]+)["'`]\s*,\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*=>)""",
+    re.IGNORECASE,
+)
+
+# Laravel: Route::get('/path', handler) / Route::post(...)
+_PHP_ROUTE = re.compile(
+    rb"""\bRoute::(get|post|put|delete|patch|head|options|any)\(\s*["']([^"']+)["']\s*,\s*([^)]+)\)""",
+    re.IGNORECASE,
+)
+
+# Laravel: Route::match(['get','post'], '/path', handler)
+_PHP_MATCH = re.compile(
+    rb"""\bRoute::match\(\s*\[([^\]]+)\]\s*,\s*["']([^"']+)["']\s*,\s*([^)]+)\)""",
     re.IGNORECASE,
 )
 
@@ -51,6 +69,9 @@ _JS_METHOD = re.compile(
 def _parse_methods(raw: bytes) -> List[str]:
     """Extract method strings from b'"GET", "POST"' raw bytes."""
     return [m.strip(b"\"' ").decode().upper() for m in raw.split(b",") if m.strip()]
+
+def _clean_handler(raw: bytes) -> str:
+    return raw.decode(errors="replace").strip().rstrip(",").strip()
 
 
 def extract_routes(source: bytes, file_path: str, lang: str) -> List[RouteInfo]:
@@ -123,5 +144,40 @@ def extract_routes(source: bytes, file_path: str, lang: str) -> List[RouteInfo]:
                 start_byte=m.start(),
                 end_byte=m.end(),
             ))
+        for m in _JS_INLINE.finditer(source):
+            method = m.group(1).decode().upper()
+            path = m.group(2).decode(errors="replace")
+            results.append(RouteInfo(
+                method=method,
+                path=path,
+                handler="<inline>",
+                start_byte=m.start(),
+                end_byte=m.end(),
+            ))
+
+    elif lang == "php":
+        for m in _PHP_ROUTE.finditer(source):
+            method = m.group(1).decode().upper()
+            path = m.group(2).decode(errors="replace")
+            handler = _clean_handler(m.group(3))
+            results.append(RouteInfo(
+                method=method,
+                path=path,
+                handler=handler,
+                start_byte=m.start(),
+                end_byte=m.end(),
+            ))
+        for m in _PHP_MATCH.finditer(source):
+            methods = _parse_methods(m.group(1))
+            path = m.group(2).decode(errors="replace")
+            handler = _clean_handler(m.group(3))
+            for method in methods:
+                results.append(RouteInfo(
+                    method=method,
+                    path=path,
+                    handler=handler,
+                    start_byte=m.start(),
+                    end_byte=m.end(),
+                ))
 
     return results

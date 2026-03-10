@@ -15,6 +15,7 @@ from symdex.core.parser import (
     _extract_comment_docstring,
     _extract_python_docstring,
 )
+from symdex.core import parser as parser_mod
 
 
 # ── _get_language — grammar import failure ────────────────────────────────────
@@ -32,6 +33,14 @@ def test_get_language_import_failure():
     # lang_name is still "python" from _EXT_MAP; language is None due to the error
     assert lang_name == "python"
     assert language is None
+
+
+@pytest.mark.parametrize("ext", sorted(parser_mod._EXT_MAP.keys()))
+def test_get_language_loads_all_supported_extensions(ext):
+    """Every configured extension should resolve a grammar language."""
+    lang_name, language = _get_language(ext)
+    assert lang_name is not None
+    assert language is not None
 
 
 # ── parse_file — OSError on read ──────────────────────────────────────────────
