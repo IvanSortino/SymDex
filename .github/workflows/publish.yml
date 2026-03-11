@@ -2,8 +2,13 @@ name: Publish to PyPI
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+      - "symdex/**"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -16,22 +21,70 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      - name: Resolve version and publish need
+        id: resolve
+        run: |
+          python - << 'PY'
+          import json
+          import pathlib
+          import urllib.request
+          import tomllib
+
+          pyproject = pathlib.Path("pyproject.toml")
+          version = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+          package = "symdex"
+          should_publish = True
+
+          try:
+            with urllib.request.urlopen(f"https://pypi.org/pypi/{package}/json", timeout=20) as resp:
+              data = json.load(resp)
+            if version in data.get("releases", {}):
+              should_publish = False
+          except Exception:
+            # If PyPI check fails, keep publish enabled so release is not silently skipped.
+            should_publish = True
+
+          with open(pathlib.Path(".github_output"), "w", encoding="utf-8") as fh:
+            fh.write(f"version={version}\n")
+            fh.write(f"tag=v{version}\n")
+            fh.write(f"should_publish={'true' if should_publish else 'false'}\n")
+          PY
+          cat .github_output >> "$GITHUB_OUTPUT"
+
       - name: Install build dependencies
+        if: steps.resolve.outputs.should_publish == 'true'
         run: pip install build
 
       - name: Build package
+        if: steps.resolve.outputs.should_publish == 'true'
         run: python -m build
 
       - name: Publish to PyPI
+        if: steps.resolve.outputs.should_publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
 
+      - name: Create and push tag
+        if: steps.resolve.outputs.should_publish == 'true'
+        run: |
+          TAG="${{ steps.resolve.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally."
+          else
+            git tag "$TAG"
+          fi
+          git push origin "$TAG" || true
+
       - name: Create GitHub Release
+        if: steps.resolve.outputs.should_publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.resolve.outputs.tag }}
           generate_release_notes: true
