@@ -30,7 +30,29 @@ def _get_language(ext: str):
     try:
         from tree_sitter import Language, Parser as TSParser  # noqa: F401
         mod = importlib.import_module(module_name)
-        language = Language(mod.language())
+        
+        loader_candidates = [
+            "LANGUAGE",
+            "language",
+            f"LANGUAGE_{lang_name.upper()}",
+            f"language_{lang_name}",
+            "LANGUAGE_TYPESCRIPT",
+            "language_typescript",
+        ]
+        
+        language = None
+        for attr in dict.fromkeys(loader_candidates):
+            val = getattr(mod, attr, None)
+            if val is not None:
+                language_ptr = val() if callable(val) else val
+                language = Language(language_ptr)
+                break
+                
+        if language is None:
+            raise AttributeError(
+                f"No supported language loader found in module {module_name}"
+            )
+            
         return lang_name, language
     except Exception as exc:
         logger.warning("Could not load grammar for %s: %s", ext, exc)
