@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   publish:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
     runs-on: ubuntu-latest
     environment: pypi
 
@@ -29,52 +30,76 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve version and publish need
-        id: resolve
+      - name: Resolve next version from PyPI
+        id: version
         run: |
           python - << 'PY'
           import json
           import pathlib
+          import re
           import urllib.request
           import tomllib
 
           pyproject = pathlib.Path("pyproject.toml")
-          version = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+          raw = pyproject.read_text(encoding="utf-8")
+          current = tomllib.loads(raw)["project"]["version"]
           package = "symdex"
-          should_publish = True
-
+          m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", current)
+          if not m:
+            raise SystemExit(f"Unsupported version format for auto-release: {current}")
+          cur_major, cur_minor, cur_patch = map(int, m.groups())
+          next_patch = cur_patch
           try:
             with urllib.request.urlopen(f"https://pypi.org/pypi/{package}/json", timeout=20) as resp:
               data = json.load(resp)
-            if version in data.get("releases", {}):
-              should_publish = False
+            for v in data.get("releases", {}).keys():
+              mm = re.match(r"^(\d+)\.(\d+)\.(\d+)$", v)
+              if not mm:
+                continue
+              maj, min_, patch = map(int, mm.groups())
+              if maj == cur_major and min_ == cur_minor:
+                next_patch = max(next_patch, patch + 1)
           except Exception:
-            # If PyPI check fails, keep publish enabled so release is not silently skipped.
-            should_publish = True
+            pass
+          version = f"{cur_major}.{cur_minor}.{next_patch}"
+          updated = re.sub(
+            r'(?m)^version\s*=\s*"[^"]+"',
+            f'version = "{version}"',
+            raw,
+            count=1,
+          )
+          pyproject.write_text(updated, encoding="utf-8")
 
           with open(pathlib.Path(".github_output"), "w", encoding="utf-8") as fh:
             fh.write(f"version={version}\n")
             fh.write(f"tag=v{version}\n")
-            fh.write(f"should_publish={'true' if should_publish else 'false'}\n")
           PY
           cat .github_output >> "$GITHUB_OUTPUT"
 
       - name: Install build dependencies
-        if: steps.resolve.outputs.should_publish == 'true'
         run: pip install build
 
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          if git diff --cached --quiet; then
+            echo "pyproject.toml already at target version."
+          else
+            git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }} [skip release]"
+            git push origin main
+          fi
+
       - name: Build package
-        if: steps.resolve.outputs.should_publish == 'true'
         run: python -m build
 
       - name: Publish to PyPI
-        if: steps.resolve.outputs.should_publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create and push tag
-        if: steps.resolve.outputs.should_publish == 'true'
         run: |
-          TAG="${{ steps.resolve.outputs.tag }}"
+          TAG="${{ steps.version.outputs.tag }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists locally."
           else
@@ -83,8 +108,7 @@ jobs:
           git push origin "$TAG" || true
 
       - name: Create GitHub Release
-        if: steps.resolve.outputs.should_publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.resolve.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
