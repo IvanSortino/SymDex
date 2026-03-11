@@ -123,21 +123,26 @@ def _get_language(ext: str):
         mod = importlib.import_module(module_name)
         loader_candidates = []
         if preferred_loader:
+            loader_candidates.append(preferred_loader.upper())
             loader_candidates.append(preferred_loader)
         loader_candidates.extend(
             [
+                "LANGUAGE",
                 "language",
+                f"LANGUAGE_{lang_name.upper()}",
                 f"language_{lang_name}",
+                "LANGUAGE_TYPESCRIPT",
                 "language_typescript",
+                "LANGUAGE_PHP",
                 "language_php",
-                "language_php_only",
             ]
         )
         language = None
         for attr in dict.fromkeys(loader_candidates):
-            fn = getattr(mod, attr, None)
-            if callable(fn):
-                language = Language(fn())
+            val = getattr(mod, attr, None)
+            if val is not None:
+                language_ptr = val() if callable(val) else val
+                language = Language(language_ptr)
                 break
         if language is None:
             raise AttributeError(
