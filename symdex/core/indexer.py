@@ -9,6 +9,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from symdex.core.parser import parse_file
+from symdex.core.ignore import build_ignore_spec
 from symdex.graph.call_graph import extract_edges as _extract_edges
 from symdex.core.route_extractor import extract_routes as _extract_routes
 from symdex.core.storage import (
@@ -28,11 +29,14 @@ def _embed_symbols(conn, repo: str, file_path: str) -> None:
     """Compute and store embeddings for all symbols in repo+file.
 
     Queries symbols already inserted for this repo/file, computes an embedding
-    text from signature, docstring, and name, then calls embed_text and stores
+    text from signature, docstring, and name, then calls embed_for_index and stores
     the result via upsert_embedding. Failures per symbol are logged and skipped
     so that a single bad symbol never aborts indexing.
+
+    Note: Existing indexed DBs have pre-prefix vectors. For improved recall with
+    asymmetric models (nomic-embed-text, MiniLM), re-index your repositories.
     """
-    from symdex.search.semantic import embed_text  # local import avoids circular dep
+    from symdex.search.semantic import embed_for_index  # local import avoids circular dep
 
     rows = conn.execute(
         "SELECT id, name, signature, docstring FROM symbols WHERE repo=? AND file=?",
@@ -46,7 +50,7 @@ def _embed_symbols(conn, repo: str, file_path: str) -> None:
         docstring = row["docstring"] or ""
         embed_input = f"{signature}\n{docstring}\n{name}".strip()
         try:
-            vec = embed_text(embed_input)
+            vec = embed_for_index(embed_input)
             upsert_embedding(conn, symbol_id, vec)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Embedding failed for symbol %s (id=%s): %s", name, symbol_id, exc)
@@ -120,6 +124,7 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
 
     indexed = 0
     skipped = 0
+    ignore_spec = build_ignore_spec(abs_path)
 
     try:
         for dirpath, dirnames, filenames in os.walk(path):
@@ -132,6 +137,10 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
 
                 abs_file = os.path.join(dirpath, filename)
                 rel_file = os.path.relpath(abs_file, path).replace("\\", "/")
+
+                # Skip files matching ignore patterns
+                if ignore_spec.match_file(rel_file):
+                    continue
 
                 try:
                     current_hash = _sha256(abs_file)

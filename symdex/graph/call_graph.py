@@ -156,3 +156,82 @@ def get_callees(conn: sqlite3.Connection, name: str, repo: str) -> list[dict]:
         WHERE s.name = ? AND s.repo = ?
     """, (name, repo)).fetchall()
     return [{"name": r["callee_name"], "file": r["callee_file"]} for r in rows]
+
+
+def find_circular_deps(repo: str, db_path: str) -> dict:
+    """
+    Detect circular dependencies via DFS over the edges adjacency map.
+    Returns {"cycles": [["a.py", "b.py", "a.py"], ...], "count": N}
+    Cap at 20 cycles. Return {"cycles": [], "count": 0} if none.
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # 1. Build adjacency map: file -> set of files it calls
+        adj: dict[str, set[str]] = {}
+        edge_rows = conn.execute(
+            """
+            SELECT s.file AS caller_file, e.callee_file
+            FROM edges e
+            JOIN symbols s ON e.caller_id = s.id
+            WHERE s.repo = ? AND e.callee_file IS NOT NULL
+            """,
+            (repo,),
+        ).fetchall()
+
+        for row in edge_rows:
+            caller_file = row["caller_file"]
+            callee_file = row["callee_file"]
+            if caller_file and callee_file:
+                adj.setdefault(caller_file, set()).add(callee_file)
+
+        # 2. DFS to find cycles
+        cycles: list[list[str]] = []
+        visited: set[str] = set()
+        rec_stack: set[str] = set()  # Current recursion stack
+
+        def dfs(node: str, path: list[str]) -> None:
+            """DFS with cycle detection via recursion stack."""
+            if len(cycles) >= 20:  # Cap at 20 cycles
+                return
+
+            if node in rec_stack:
+                # Found a cycle: extract from path
+                if node in path:
+                    cycle_start_idx = path.index(node)
+                    cycle = path[cycle_start_idx:] + [node]
+                    # Normalize cycle to start with lexicographically smallest element
+                    if cycle:
+                        body = cycle[:-1]
+                        min_idx = body.index(min(body))
+                        rotated = body[min_idx:] + body[:min_idx]
+                        normalized = rotated + [rotated[0]]
+                        # Dedup: don't add if we've already recorded this cycle
+                        if normalized not in cycles:
+                            cycles.append(normalized)
+                return
+
+            if node in visited:
+                return
+
+            visited.add(node)
+            rec_stack.add(node)
+            path.append(node)
+
+            for neighbor in adj.get(node, set()):
+                dfs(neighbor, path)
+
+            path.pop()
+            rec_stack.remove(node)
+
+        # Start DFS from each unvisited node
+        for node in adj:
+            if node not in visited:
+                dfs(node, [])
+
+        return {
+            "cycles": cycles,
+            "count": len(cycles),
+        }
+    finally:
+        conn.close()

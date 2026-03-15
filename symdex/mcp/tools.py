@@ -8,7 +8,9 @@ from symdex.core.indexer import index_folder as _index_folder, invalidate
 from symdex.core.storage import (
     get_connection,
     get_db_path,
+    get_index_status,
     get_registry_path,  # noqa: F401 — imported so tests can monkeypatch this module's reference
+    get_repo_stats,
     get_stale_repos,
     query_file_symbols,
     query_repos,
@@ -316,3 +318,126 @@ def gc_stale_indexes_tool() -> dict:
         remove_repo(entry["name"])
         removed.append(entry["name"])
     return {"removed": removed, "count": len(removed)}
+
+
+def get_index_status_tool(repo: str) -> dict:
+    """Return index status for a repo."""
+    root = _get_root_path(repo)
+    if root is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+    db_path = get_db_path(repo)
+    return get_index_status(repo, db_path)
+
+
+def get_repo_stats_tool(repo: str) -> dict:
+    """Return comprehensive statistics for a repo."""
+    root = _get_root_path(repo)
+    if root is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+    db_path = get_db_path(repo)
+    return get_repo_stats(repo, db_path)
+
+
+def get_graph_diagram_tool(
+    repo: str,
+    focus_file: str | None = None,
+    depth: int = 2,
+    direction: str = "LR",
+) -> dict:
+    """Generate a Mermaid diagram from the call graph of an indexed repo.
+
+    Args:
+        repo:       Repo name as registered with index_folder or index_repo.
+        focus_file: Optional relative file path. When provided, only edges
+                    reachable within ``depth`` BFS hops from this file are
+                    included.
+        depth:      BFS hop limit when ``focus_file`` is set. Default 2.
+        direction:  Mermaid graph direction — ``"LR"`` (left-right) or
+                    ``"TD"`` (top-down). Default ``"LR"``.
+
+    Returns:
+        ``{diagram: str, node_count: int, edge_count: int, truncated: bool}``
+        or ``{"error": {...}}`` on failure.
+    """
+    from symdex.graph.diagram import build_mermaid_diagram
+
+    if _get_root_path(repo) is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+
+    conn = get_connection(get_db_path(repo))
+    try:
+        # Fetch all edges with caller metadata via JOIN
+        raw_edges = conn.execute(
+            """
+            SELECT e.caller_id,
+                   e.callee_name,
+                   e.callee_file,
+                   s.file  AS caller_file,
+                   s.name  AS caller_name
+            FROM edges e
+            JOIN symbols s ON e.caller_id = s.id
+            WHERE s.repo = ?
+            """,
+            (repo,),
+        ).fetchall()
+        edge_dicts = [dict(r) for r in raw_edges]
+
+        # Fetch all symbols for this repo
+        sym_rows = conn.execute(
+            "SELECT id, file, name, kind FROM symbols WHERE repo = ?",
+            (repo,),
+        ).fetchall()
+        symbols_by_id: dict[int, dict] = {r["id"]: dict(r) for r in sym_rows}
+    finally:
+        conn.close()
+
+    # BFS subgraph filtering when a focus file is requested
+    if focus_file is not None:
+        # Build adjacency set keyed by file
+        adj_fwd: dict[str, set[str]] = {}
+        adj_bwd: dict[str, set[str]] = {}
+        for e in edge_dicts:
+            cf = e.get("caller_file")
+            tf = e.get("callee_file")
+            if cf and tf:
+                adj_fwd.setdefault(cf, set()).add(tf)
+                adj_bwd.setdefault(tf, set()).add(cf)
+
+        # BFS outward (callees) and inward (callers) up to depth hops
+        reachable: set[str] = {focus_file}
+        frontier = {focus_file}
+        for _ in range(depth):
+            next_frontier: set[str] = set()
+            for node in frontier:
+                next_frontier.update(adj_fwd.get(node, set()))
+                next_frontier.update(adj_bwd.get(node, set()))
+            next_frontier -= reachable
+            reachable.update(next_frontier)
+            frontier = next_frontier
+
+        edge_dicts = [
+            e for e in edge_dicts
+            if e.get("caller_file") in reachable
+            and e.get("callee_file") in reachable
+        ]
+
+    return build_mermaid_diagram(edge_dicts, symbols_by_id, direction=direction)
+
+
+def find_circular_deps_tool(repo: str) -> dict:
+    """Detect circular dependencies in a repo's call graph.
+
+    Args:
+        repo: Repo name as registered with index_folder or index_repo.
+
+    Returns:
+        {"cycles": [[file1, file2, ...], ...], "count": N}
+        or {"error": {...}} if repo not indexed.
+    """
+    from symdex.graph.call_graph import find_circular_deps
+
+    if _get_root_path(repo) is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+
+    db_path = get_db_path(repo)
+    return find_circular_deps(repo, db_path)

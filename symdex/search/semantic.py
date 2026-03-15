@@ -2,6 +2,12 @@
 # License: See LICENSE file in the project root.
 
 import os
+
+# Suppress HuggingFace Hub noise at import time
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+
 import numpy as np
 
 _model = None
@@ -26,6 +32,32 @@ def embed_text(text: str) -> np.ndarray:
     return vec.astype("float32")
 
 
+def embed_for_index(text: str) -> np.ndarray:
+    """Return float32 embedding for indexing with 'search_document: ' prefix.
+
+    Asymmetric models expect the 'search_document: ' prefix for indexed text.
+    """
+    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local")
+    if backend == "mcpclient":
+        return _embed_mcpclient(f"search_document: {text}")
+    model = _get_model()
+    vec = model.encode(f"search_document: {text}", normalize_embeddings=True)
+    return vec.astype("float32")
+
+
+def embed_for_query(text: str) -> np.ndarray:
+    """Return float32 embedding for search queries with 'search_query: ' prefix.
+
+    Asymmetric models expect the 'search_query: ' prefix for query text.
+    """
+    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local")
+    if backend == "mcpclient":
+        return _embed_mcpclient(f"search_query: {text}")
+    model = _get_model()
+    vec = model.encode(f"search_query: {text}", normalize_embeddings=True)
+    return vec.astype("float32")
+
+
 def _embed_mcpclient(text: str) -> np.ndarray:
     import mcp
     client = mcp.MCP project()
@@ -45,7 +77,7 @@ def search_semantic(
     """Cosine similarity search over stored embeddings."""
     from symdex.core.storage import query_symbols_with_embeddings
 
-    query_vec = embed_text(query)
+    query_vec = embed_for_query(query)
     rows = query_symbols_with_embeddings(conn, repo=repo)
 
     if not rows:

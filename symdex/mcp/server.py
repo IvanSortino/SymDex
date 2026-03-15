@@ -2,6 +2,13 @@
 # Copyright (c) 2026 Muhammad Husnain
 # License: See LICENSE file in the project root.
 
+import os
+
+# Suppress HuggingFace Hub noise at import time
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+
 from fastmcp import FastMCP
 
 from symdex.mcp.tools import (
@@ -18,6 +25,10 @@ from symdex.mcp.tools import (
     invalidate_cache_tool,
     gc_stale_indexes_tool,
     search_routes_tool,
+    get_index_status_tool,
+    get_repo_stats_tool,
+    get_graph_diagram_tool,
+    find_circular_deps_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -93,6 +104,45 @@ def search_routes(
 @mcp.tool(name="gc_stale_indexes", description="Remove stale index databases for repos whose directories no longer exist on disk.")
 def gc_stale_indexes() -> dict:
     return gc_stale_indexes_tool()
+
+
+@mcp.tool(name="get_index_status", description="Get indexing status for a repo: symbol count, file count, last indexed time, staleness, and watcher status.")
+def get_index_status(repo: str) -> dict:
+    return get_index_status_tool(repo=repo)
+
+
+@mcp.tool(name="get_repo_stats", description="Get comprehensive statistics for a repo: symbol count, language distribution, top callers/callees, orphan files, and circular dependency count.")
+def get_repo_stats(repo: str) -> dict:
+    return get_repo_stats_tool(repo=repo)
+
+
+@mcp.tool(
+    name="get_graph_diagram",
+    description=(
+        "Generate a Mermaid call-graph diagram for an indexed repo. "
+        "Nodes are files; edges are call relationships. "
+        "Optionally focus on a single file with BFS depth limit. "
+        "Cycle edges are marked red. Renders in MCP client, GitHub, Cursor, and any Markdown viewer."
+    ),
+)
+def get_graph_diagram(
+    repo: str,
+    focus_file: str | None = None,
+    depth: int = 2,
+    direction: str = "LR",
+) -> dict:
+    return get_graph_diagram_tool(repo=repo, focus_file=focus_file, depth=depth, direction=direction)
+
+
+@mcp.tool(
+    name="find_circular_deps",
+    description=(
+        "Detect circular dependencies in a repo's call graph. "
+        "Returns up to 20 cycles. Each cycle is a list of files representing the dependency loop."
+    ),
+)
+def find_circular_deps(repo: str) -> dict:
+    return find_circular_deps_tool(repo=repo)
 
 
 if __name__ == "__main__":

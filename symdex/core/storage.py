@@ -323,3 +323,249 @@ def query_routes(
 def delete_file_routes(conn: sqlite3.Connection, repo: str, file: str) -> None:
     """Remove all route records for a specific file in a repo."""
     conn.execute("DELETE FROM routes WHERE repo=? AND file=?", (repo, file))
+
+
+def get_index_status(repo: str, db_path: str) -> dict:
+    """
+    Returns index status for a repo.
+
+    Fields:
+    - repo: str
+    - symbol_count: int (count of rows in symbols table for this repo)
+    - file_count: int (count of rows in files table for this repo)
+    - last_indexed: str ISO8601 UTC (max indexed_at from files table, or None)
+    - age_seconds: float (seconds since last_indexed, or None)
+    - stale: bool (True if any file's mtime > last_indexed, False otherwise)
+    - watcher_active: bool (True if ~/.symdex-mcp/{repo}.watch.pid exists)
+    """
+    import datetime
+    from pathlib import Path
+
+    conn = get_connection(db_path)
+    try:
+        # Count symbols for this repo
+        symbol_count = conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # Count distinct files for this repo
+        file_count = conn.execute(
+            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # Get last_indexed timestamp
+        row = conn.execute(
+            "SELECT MAX(indexed_at) FROM files WHERE repo=?", (repo,)
+        ).fetchone()
+        last_indexed_str = row[0] if row[0] else None
+
+        # Calculate age_seconds
+        age_seconds = None
+        if last_indexed_str:
+            # Parse ISO8601 datetime from SQLite (in UTC).
+            # Use fromisoformat and then treat as UTC by replacing tzinfo.
+            last_indexed_dt = datetime.datetime.fromisoformat(last_indexed_str)
+            # SQLite's datetime('now') is UTC, so we need to use UTC now for comparison
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            age_seconds = (now_utc - last_indexed_dt.replace(tzinfo=datetime.timezone.utc)).total_seconds()
+
+        # Check if any file is stale (mtime > last_indexed)
+        stale = False
+        if last_indexed_str:
+            # SQLite stores datetime('now') as UTC string.
+            # File mtimes are in local time (UNIX timestamp).
+            # The safest way: query the current time from SQLite in the same way
+            # so we know the system's interpretation.
+            # Actually, we need to compare: is the file newer than when it was indexed?
+            # Get the timestamp SQLite recorded for the index.
+            # Parse the string and convert to UNIX timestamp assuming it's UTC.
+            last_indexed_dt = datetime.datetime.fromisoformat(last_indexed_str)
+            # This datetime is naive, but represents UTC per SQLite's datetime('now').
+            # Convert to UNIX timestamp by treating as UTC:
+            # Use a timezone-aware datetime to properly convert UTC to UNIX timestamp.
+            last_indexed_dt_utc = last_indexed_dt.replace(
+                tzinfo=datetime.timezone.utc
+            )
+            last_indexed_timestamp = last_indexed_dt_utc.timestamp()
+
+            # Get root_path from registry
+            root_path = None
+            registry_conn = _get_registry_connection()
+            try:
+                reg_row = registry_conn.execute(
+                    "SELECT root_path FROM repos WHERE name=?", (repo,)
+                ).fetchone()
+                if reg_row:
+                    root_path = reg_row["root_path"]
+            finally:
+                registry_conn.close()
+
+            if root_path:
+                # Check all indexed files
+                file_rows = conn.execute(
+                    "SELECT DISTINCT path FROM files WHERE repo=?", (repo,)
+                ).fetchall()
+                for file_row in file_rows:
+                    rel_path = file_row["path"]
+                    abs_path = os.path.join(root_path, rel_path)
+                    try:
+                        file_mtime = os.path.getmtime(abs_path)
+                        # Compare timestamps: if file was modified after indexing, it's stale
+                        if file_mtime > last_indexed_timestamp:
+                            stale = True
+                            break
+                    except OSError:
+                        # File deleted or inaccessible
+                        stale = True
+                        break
+
+        # Check if watcher is active
+        watch_pid_path = Path.home() / ".symdex-mcp" / f"{repo}.watch.pid"
+        watcher_active = watch_pid_path.exists()
+
+    finally:
+        conn.close()
+
+    return {
+        "repo": repo,
+        "symbol_count": symbol_count,
+        "file_count": file_count,
+        "last_indexed": last_indexed_str,
+        "age_seconds": age_seconds,
+        "stale": stale,
+        "watcher_active": watcher_active,
+    }
+
+
+def get_repo_stats(repo: str, db_path: str) -> dict:
+    """
+    Returns comprehensive statistics for a repo.
+
+    Fields:
+    - repo: str
+    - symbol_count: int (total symbols in repo)
+    - file_count: int (total files indexed in repo)
+    - language_distribution: dict (language -> count of symbols)
+    - top_fan_in: list[dict] (top 5 files with most dependents; each: {name, dependents})
+    - top_fan_out: list[dict] (top 5 files with most outgoing calls; each: {name, calls})
+    - orphan_files: list[str] (files with no symbols and no edges)
+    - circular_dep_count: int (number of distinct files in circular dependencies, or 0 if not computed)
+    - edge_count: int (total edges for this repo)
+    """
+    conn = get_connection(db_path)
+    try:
+        # 1. symbol_count
+        symbol_count = conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # 2. file_count
+        file_count = conn.execute(
+            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # 3. language_distribution: infer from file extension
+        file_rows = conn.execute(
+            "SELECT DISTINCT path FROM files WHERE repo=?", (repo,)
+        ).fetchall()
+
+        lang_dist = {}
+        ext_to_lang = {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".go": "go",
+            ".rs": "rust",
+            ".java": "java",
+            ".rb": "ruby",
+            ".cs": "csharp",
+            ".cpp": "cpp",
+            ".cc": "cpp",
+            ".c": "c",
+            ".ex": "elixir",
+            ".exs": "elixir",
+            ".php": "php",
+            ".dart": "dart",
+        }
+
+        for file_row in file_rows:
+            path = file_row["path"]
+            # Get extension, handle multi-dot extensions
+            if "." in path:
+                ext = "." + path.rsplit(".", 1)[-1]
+            else:
+                ext = ""
+            lang = ext_to_lang.get(ext, "other")
+            # Count symbols in this file
+            count = conn.execute(
+                "SELECT COUNT(*) FROM symbols WHERE repo=? AND file=?", (repo, path)
+            ).fetchone()[0]
+            if count > 0:
+                lang_dist[lang] = lang_dist.get(lang, 0) + count
+
+        # 4. top_fan_in: files with most dependents (filtered to this repo via caller)
+        fan_in_rows = conn.execute(
+            "SELECT e.callee_file, COUNT(*) as dependents FROM edges e "
+            "JOIN symbols s ON e.caller_id = s.id "
+            "WHERE e.callee_file IS NOT NULL AND s.repo=? "
+            "GROUP BY e.callee_file ORDER BY dependents DESC LIMIT 5",
+            (repo,),
+        ).fetchall()
+        top_fan_in = [
+            {"name": row["callee_file"], "dependents": row["dependents"]}
+            for row in fan_in_rows
+        ]
+
+        # 5. top_fan_out: files with most outgoing calls
+        # Join symbols to edges via caller_id, group by file, count edges
+        fan_out_rows = conn.execute(
+            "SELECT s.file, COUNT(*) as calls FROM edges e "
+            "JOIN symbols s ON e.caller_id = s.id "
+            "WHERE s.repo=? GROUP BY s.file ORDER BY calls DESC LIMIT 5",
+            (repo,),
+        ).fetchall()
+        top_fan_out = [
+            {"name": row["file"], "calls": row["calls"]}
+            for row in fan_out_rows
+        ]
+
+        # 6. orphan_files: files with no symbols and no edges
+        orphan_rows = conn.execute(
+            "SELECT f.path FROM files f "
+            "WHERE f.repo=? "
+            "AND NOT EXISTS (SELECT 1 FROM symbols s WHERE s.repo=f.repo AND s.file=f.path) "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM edges e JOIN symbols s ON e.caller_id=s.id "
+            "WHERE e.callee_file=f.path AND s.repo=f.repo"
+            ")",
+            (repo,),
+        ).fetchall()
+        orphan_files = [row["path"] for row in orphan_rows]
+
+        # 7. circular_dep_count: count distinct files involved in cycles
+        # Import and call find_circular_deps to get the actual count
+        from symdex.graph.call_graph import find_circular_deps
+        circular_deps_result = find_circular_deps(repo, db_path)
+        circular_dep_count = circular_deps_result.get("count", 0)
+
+        # 8. edge_count: total edges for this repo
+        edge_count = conn.execute(
+            "SELECT COUNT(*) FROM edges e "
+            "WHERE e.caller_id IN (SELECT id FROM symbols WHERE repo=?)",
+            (repo,),
+        ).fetchone()[0]
+
+    finally:
+        conn.close()
+
+    return {
+        "repo": repo,
+        "symbol_count": symbol_count,
+        "file_count": file_count,
+        "language_distribution": lang_dist,
+        "top_fan_in": top_fan_in,
+        "top_fan_out": top_fan_out,
+        "orphan_files": orphan_files,
+        "circular_dep_count": circular_dep_count,
+        "edge_count": edge_count,
+    }
