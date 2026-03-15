@@ -5,6 +5,7 @@
 # Tests for get_index_status MCP tool.
 
 import os
+import time
 import pytest
 import tempfile
 from symdex.mcp.tools import get_index_status_tool, index_folder_tool
@@ -57,13 +58,17 @@ def test_get_index_status_returns_fields():
         from pathlib import Path
         src = Path(tmpdir) / "statusproject"
         src.mkdir()
-        (src / "mod.py").write_text(
+        mod_path = src / "mod.py"
+        mod_path.write_text(
             'def hello():\n'
             '    """Say hello."""\n'
             '    return "hello"\n\n'
             'class Greeter:\n'
             '    pass\n'
         )
+        # Set mtime 10 seconds in the past so stale check reliably returns False
+        past = time.time() - 10
+        os.utime(mod_path, (past, past))
 
         # Index the project
         result = index_folder_tool(path=str(src), name="status_repo")
