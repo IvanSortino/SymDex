@@ -420,7 +420,7 @@ def get_index_status(repo: str, db_path: str) -> dict:
                         break
 
         # Check if watcher is active
-        watch_pid_path = pathlib.Path.home() / ".symdex-mcp" / f"{repo}.watch.pid"
+        watch_pid_path = Path.home() / ".symdex-mcp" / f"{repo}.watch.pid"
         watcher_active = watch_pid_path.exists()
 
     finally:
