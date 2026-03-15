@@ -180,8 +180,10 @@ def find_circular_deps(repo: str, db_path: str) -> dict:
                     cycle = path[cycle_start_idx:] + [node]
                     # Normalize cycle to start with lexicographically smallest element
                     if cycle:
-                        min_idx = cycle[:-1].index(min(cycle[:-1]))
-                        normalized = cycle[min_idx:-1] + [cycle[min_idx]]
+                        body = cycle[:-1]
+                        min_idx = body.index(min(body))
+                        rotated = body[min_idx:] + body[:min_idx]
+                        normalized = rotated + [rotated[0]]
                         # Dedup: don't add if we've already recorded this cycle
                         if normalized not in cycles:
                             cycles.append(normalized)
