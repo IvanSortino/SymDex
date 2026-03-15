@@ -25,6 +25,7 @@ from symdex.mcp.tools import (
     invalidate_cache_tool,
     gc_stale_indexes_tool,
     search_routes_tool,
+    get_index_status_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -100,6 +101,11 @@ def search_routes(
 @mcp.tool(name="gc_stale_indexes", description="Remove stale index databases for repos whose directories no longer exist on disk.")
 def gc_stale_indexes() -> dict:
     return gc_stale_indexes_tool()
+
+
+@mcp.tool(name="get_index_status", description="Get indexing status for a repo: symbol count, file count, last indexed time, staleness, and watcher status.")
+def get_index_status(repo: str) -> dict:
+    return get_index_status_tool(repo=repo)
 
 
 if __name__ == "__main__":

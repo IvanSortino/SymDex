@@ -8,6 +8,7 @@ from symdex.core.indexer import index_folder as _index_folder, invalidate
 from symdex.core.storage import (
     get_connection,
     get_db_path,
+    get_index_status,
     get_registry_path,  # noqa: F401 — imported so tests can monkeypatch this module's reference
     get_stale_repos,
     query_file_symbols,
@@ -316,3 +317,12 @@ def gc_stale_indexes_tool() -> dict:
         remove_repo(entry["name"])
         removed.append(entry["name"])
     return {"removed": removed, "count": len(removed)}
+
+
+def get_index_status_tool(repo: str) -> dict:
+    """Return index status for a repo."""
+    root = _get_root_path(repo)
+    if root is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+    db_path = get_db_path(repo)
+    return get_index_status(repo, db_path)

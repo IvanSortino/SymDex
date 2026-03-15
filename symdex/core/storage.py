@@ -323,3 +323,115 @@ def query_routes(
 def delete_file_routes(conn: sqlite3.Connection, repo: str, file: str) -> None:
     """Remove all route records for a specific file in a repo."""
     conn.execute("DELETE FROM routes WHERE repo=? AND file=?", (repo, file))
+
+
+def get_index_status(repo: str, db_path: str) -> dict:
+    """
+    Returns index status for a repo.
+
+    Fields:
+    - repo: str
+    - symbol_count: int (count of rows in symbols table for this repo)
+    - file_count: int (count of rows in files table for this repo)
+    - last_indexed: str ISO8601 UTC (max indexed_at from files table, or None)
+    - age_seconds: float (seconds since last_indexed, or None)
+    - stale: bool (True if any file's mtime > last_indexed, False otherwise)
+    - watcher_active: bool (True if ~/.symdex-mcp/{repo}.watch.pid exists)
+    """
+    import datetime
+    from pathlib import Path
+
+    conn = get_connection(db_path)
+    try:
+        # Count symbols for this repo
+        symbol_count = conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # Count distinct files for this repo
+        file_count = conn.execute(
+            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # Get last_indexed timestamp
+        row = conn.execute(
+            "SELECT MAX(indexed_at) FROM files WHERE repo=?", (repo,)
+        ).fetchone()
+        last_indexed_str = row[0] if row[0] else None
+
+        # Calculate age_seconds
+        age_seconds = None
+        if last_indexed_str:
+            # Parse ISO8601 datetime from SQLite (in UTC).
+            # Use fromisoformat and then treat as UTC by replacing tzinfo.
+            last_indexed_dt = datetime.datetime.fromisoformat(last_indexed_str)
+            # SQLite's datetime('now') is UTC, so we need to use UTC now for comparison
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            age_seconds = (now_utc - last_indexed_dt.replace(tzinfo=datetime.timezone.utc)).total_seconds()
+
+        # Check if any file is stale (mtime > last_indexed)
+        stale = False
+        if last_indexed_str:
+            # SQLite stores datetime('now') as UTC string.
+            # File mtimes are in local time (UNIX timestamp).
+            # The safest way: query the current time from SQLite in the same way
+            # so we know the system's interpretation.
+            # Actually, we need to compare: is the file newer than when it was indexed?
+            # Get the timestamp SQLite recorded for the index.
+            # Parse the string and convert to UNIX timestamp assuming it's UTC.
+            last_indexed_dt = datetime.datetime.fromisoformat(last_indexed_str)
+            # This datetime is naive, but represents UTC per SQLite's datetime('now').
+            # Convert to UNIX timestamp by treating as UTC:
+            # Use a timezone-aware datetime to properly convert UTC to UNIX timestamp.
+            last_indexed_dt_utc = last_indexed_dt.replace(
+                tzinfo=datetime.timezone.utc
+            )
+            last_indexed_timestamp = last_indexed_dt_utc.timestamp()
+
+            # Get root_path from registry
+            root_path = None
+            registry_conn = _get_registry_connection()
+            try:
+                reg_row = registry_conn.execute(
+                    "SELECT root_path FROM repos WHERE name=?", (repo,)
+                ).fetchone()
+                if reg_row:
+                    root_path = reg_row["root_path"]
+            finally:
+                registry_conn.close()
+
+            if root_path:
+                # Check all indexed files
+                file_rows = conn.execute(
+                    "SELECT DISTINCT path FROM files WHERE repo=?", (repo,)
+                ).fetchall()
+                for file_row in file_rows:
+                    rel_path = file_row["path"]
+                    abs_path = os.path.join(root_path, rel_path)
+                    try:
+                        file_mtime = os.path.getmtime(abs_path)
+                        # Compare timestamps: if file was modified after indexing, it's stale
+                        if file_mtime > last_indexed_timestamp:
+                            stale = True
+                            break
+                    except OSError:
+                        # File deleted or inaccessible
+                        stale = True
+                        break
+
+        # Check if watcher is active
+        watch_pid_path = pathlib.Path.home() / ".symdex-mcp" / f"{repo}.watch.pid"
+        watcher_active = watch_pid_path.exists()
+
+    finally:
+        conn.close()
+
+    return {
+        "repo": repo,
+        "symbol_count": symbol_count,
+        "file_count": file_count,
+        "last_indexed": last_indexed_str,
+        "age_seconds": age_seconds,
+        "stale": stale,
+        "watcher_active": watcher_active,
+    }
