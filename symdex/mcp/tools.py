@@ -10,6 +10,7 @@ from symdex.core.storage import (
     get_db_path,
     get_index_status,
     get_registry_path,  # noqa: F401 — imported so tests can monkeypatch this module's reference
+    get_repo_stats,
     get_stale_repos,
     query_file_symbols,
     query_repos,
@@ -326,3 +327,12 @@ def get_index_status_tool(repo: str) -> dict:
         return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
     db_path = get_db_path(repo)
     return get_index_status(repo, db_path)
+
+
+def get_repo_stats_tool(repo: str) -> dict:
+    """Return comprehensive statistics for a repo."""
+    root = _get_root_path(repo)
+    if root is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+    db_path = get_db_path(repo)
+    return get_repo_stats(repo, db_path)

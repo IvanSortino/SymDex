@@ -26,6 +26,7 @@ from symdex.mcp.tools import (
     gc_stale_indexes_tool,
     search_routes_tool,
     get_index_status_tool,
+    get_repo_stats_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -106,6 +107,11 @@ def gc_stale_indexes() -> dict:
 @mcp.tool(name="get_index_status", description="Get indexing status for a repo: symbol count, file count, last indexed time, staleness, and watcher status.")
 def get_index_status(repo: str) -> dict:
     return get_index_status_tool(repo=repo)
+
+
+@mcp.tool(name="get_repo_stats", description="Get comprehensive statistics for a repo: symbol count, language distribution, top callers/callees, orphan files, and circular dependency count.")
+def get_repo_stats(repo: str) -> dict:
+    return get_repo_stats_tool(repo=repo)
 
 
 if __name__ == "__main__":
