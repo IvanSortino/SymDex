@@ -2,6 +2,12 @@
 # License: See LICENSE file in the project root.
 
 import os
+
+# Suppress HuggingFace Hub noise at import time
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+
 import numpy as np
 
 _model = None
