@@ -27,6 +27,7 @@ from symdex.mcp.tools import (
     search_routes_tool,
     get_index_status_tool,
     get_repo_stats_tool,
+    get_graph_diagram_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -112,6 +113,24 @@ def get_index_status(repo: str) -> dict:
 @mcp.tool(name="get_repo_stats", description="Get comprehensive statistics for a repo: symbol count, language distribution, top callers/callees, orphan files, and circular dependency count.")
 def get_repo_stats(repo: str) -> dict:
     return get_repo_stats_tool(repo=repo)
+
+
+@mcp.tool(
+    name="get_graph_diagram",
+    description=(
+        "Generate a Mermaid call-graph diagram for an indexed repo. "
+        "Nodes are files; edges are call relationships. "
+        "Optionally focus on a single file with BFS depth limit. "
+        "Cycle edges are marked red. Renders in MCP client, GitHub, Cursor, and any Markdown viewer."
+    ),
+)
+def get_graph_diagram(
+    repo: str,
+    focus_file: str | None = None,
+    depth: int = 2,
+    direction: str = "LR",
+) -> dict:
+    return get_graph_diagram_tool(repo=repo, focus_file=focus_file, depth=depth, direction=direction)
 
 
 if __name__ == "__main__":
