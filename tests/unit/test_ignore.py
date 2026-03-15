@@ -44,10 +44,19 @@ def test_normal_file_not_excluded():
         assert spec.match_file("src/main.py") is False
 
 
-def test_indexer_skips_ignored_files():
+def test_indexer_skips_ignored_files(tmp_path, monkeypatch):
     """Test that the indexer respects ignore patterns."""
     from symdex.core.indexer import index_folder
     from symdex.core.storage import get_connection, get_db_path
+
+    # Monkeypatch get_db_path to use tmp_path for isolation
+    def _mock_db_path(repo_name: str) -> str:
+        db_dir = str(tmp_path / ".symdex")
+        os.makedirs(db_dir, exist_ok=True)
+        return os.path.join(db_dir, f"{repo_name}.db")
+
+    monkeypatch.setattr("symdex.core.indexer.get_db_path", _mock_db_path)
+    monkeypatch.setattr("symdex.core.storage.get_db_path", _mock_db_path)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create a Python file in a normal directory
