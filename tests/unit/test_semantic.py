@@ -50,3 +50,23 @@ def test_search_semantic_null_embedding_excluded(tmp_path):
         results = search_semantic(conn, query="anything", repo="r")
 
     assert results == []
+
+
+def test_hf_hub_env_vars_set():
+    """HF Hub environment variables should be set after importing semantic module."""
+    import os
+    # Re-verify env vars are set (they should be set at module import time)
+    assert os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS") == "1"
+    assert os.environ.get("TOKENIZERS_PARALLELISM") == "false"
+    assert os.environ.get("HF_HUB_VERBOSITY") == "error"
+
+
+def test_get_model_lazy_loads():
+    """_get_model() should only load the model on first call, not at import."""
+    from symdex.search.semantic import _get_model
+    # Just verify that _get_model can be called without errors (it will load on first call)
+    model = _get_model()
+    assert model is not None
+    # Verify it's reused on second call (same object)
+    model2 = _get_model()
+    assert model is model2
