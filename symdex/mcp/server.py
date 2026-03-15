@@ -28,6 +28,7 @@ from symdex.mcp.tools import (
     get_index_status_tool,
     get_repo_stats_tool,
     get_graph_diagram_tool,
+    find_circular_deps_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -131,6 +132,17 @@ def get_graph_diagram(
     direction: str = "LR",
 ) -> dict:
     return get_graph_diagram_tool(repo=repo, focus_file=focus_file, depth=depth, direction=direction)
+
+
+@mcp.tool(
+    name="find_circular_deps",
+    description=(
+        "Detect circular dependencies in a repo's call graph. "
+        "Returns up to 20 cycles. Each cycle is a list of files representing the dependency loop."
+    ),
+)
+def find_circular_deps(repo: str) -> dict:
+    return find_circular_deps_tool(repo=repo)
 
 
 if __name__ == "__main__":

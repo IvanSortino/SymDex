@@ -543,8 +543,10 @@ def get_repo_stats(repo: str, db_path: str) -> dict:
         orphan_files = [row["path"] for row in orphan_rows]
 
         # 7. circular_dep_count: count distinct files involved in cycles
-        # For now, return 0 as a stub. Task 7 (find_circular_deps) will implement this.
-        circular_dep_count = 0
+        # Import and call find_circular_deps to get the actual count
+        from symdex.graph.call_graph import find_circular_deps
+        circular_deps_result = find_circular_deps(repo, db_path)
+        circular_dep_count = circular_deps_result.get("count", 0)
 
         # 8. edge_count: total edges for this repo
         edge_count = conn.execute(
