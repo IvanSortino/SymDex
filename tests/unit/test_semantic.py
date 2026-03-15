@@ -3,7 +3,7 @@
 
 import numpy as np
 from unittest.mock import patch
-from symdex.search.semantic import embed_text, search_semantic
+from symdex.search.semantic import embed_text, search_semantic, embed_for_index, embed_for_query
 from symdex.core.storage import get_connection, upsert_embedding
 
 FAKE_VEC = np.array([1.0] + [0.0] * 383, dtype="float32")
@@ -28,7 +28,7 @@ def test_search_semantic_returns_scored_results(tmp_path):
     sym_id = conn.execute("SELECT id FROM symbols WHERE name='parse_file'").fetchone()[0]
     upsert_embedding(conn, sym_id, FAKE_VEC)
 
-    with patch("symdex.search.semantic.embed_text", return_value=FAKE_VEC):
+    with patch("symdex.search.semantic.embed_for_query", return_value=FAKE_VEC):
         results = search_semantic(conn, query="parse source", repo="r")
 
     assert len(results) == 1
@@ -46,7 +46,7 @@ def test_search_semantic_null_embedding_excluded(tmp_path):
     conn.commit()
     # No embedding upserted — embedding is NULL
 
-    with patch("symdex.search.semantic.embed_text", return_value=FAKE_VEC):
+    with patch("symdex.search.semantic.embed_for_query", return_value=FAKE_VEC):
         results = search_semantic(conn, query="anything", repo="r")
 
     assert results == []
@@ -70,3 +70,27 @@ def test_get_model_lazy_loads():
     # Verify it's reused on second call (same object)
     model2 = _get_model()
     assert model is model2
+
+
+@patch("symdex.search.semantic._get_model")
+def test_embed_for_index_prepends_document_prefix(mock_model):
+    """embed_for_index should prepend 'search_document: ' before embedding."""
+    mock_model.return_value.encode.return_value = FAKE_VEC
+    embed_for_index("hello")
+    # Verify the model was called with the prefixed text
+    mock_model.return_value.encode.assert_called_once_with(
+        "search_document: hello",
+        normalize_embeddings=True
+    )
+
+
+@patch("symdex.search.semantic._get_model")
+def test_embed_for_query_prepends_query_prefix(mock_model):
+    """embed_for_query should prepend 'search_query: ' before embedding."""
+    mock_model.return_value.encode.return_value = FAKE_VEC
+    embed_for_query("hello")
+    # Verify the model was called with the prefixed text
+    mock_model.return_value.encode.assert_called_once_with(
+        "search_query: hello",
+        normalize_embeddings=True
+    )
