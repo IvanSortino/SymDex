@@ -503,11 +503,13 @@ def get_repo_stats(repo: str, db_path: str) -> dict:
             if count > 0:
                 lang_dist[lang] = lang_dist.get(lang, 0) + count
 
-        # 4. top_fan_in: files with most dependents
+        # 4. top_fan_in: files with most dependents (filtered to this repo via caller)
         fan_in_rows = conn.execute(
-            "SELECT callee_file, COUNT(*) as dependents FROM edges "
-            "WHERE callee_file IS NOT NULL "
-            "GROUP BY callee_file ORDER BY dependents DESC LIMIT 5"
+            "SELECT e.callee_file, COUNT(*) as dependents FROM edges e "
+            "JOIN symbols s ON e.caller_id = s.id "
+            "WHERE e.callee_file IS NOT NULL AND s.repo=? "
+            "GROUP BY e.callee_file ORDER BY dependents DESC LIMIT 5",
+            (repo,),
         ).fetchall()
         top_fan_in = [
             {"name": row["callee_file"], "dependents": row["dependents"]}
@@ -532,7 +534,10 @@ def get_repo_stats(repo: str, db_path: str) -> dict:
             "SELECT f.path FROM files f "
             "WHERE f.repo=? "
             "AND NOT EXISTS (SELECT 1 FROM symbols s WHERE s.repo=f.repo AND s.file=f.path) "
-            "AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.callee_file=f.path)",
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM edges e JOIN symbols s ON e.caller_id=s.id "
+            "WHERE e.callee_file=f.path AND s.repo=f.repo"
+            ")",
             (repo,),
         ).fetchall()
         orphan_files = [row["path"] for row in orphan_rows]
