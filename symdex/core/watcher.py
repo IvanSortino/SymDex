@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
@@ -100,6 +101,13 @@ def watch(
     abs_path = os.path.abspath(path)
     repo = (name or os.path.basename(abs_path)).lower()
 
+    # Create pid file to signal watcher is active
+    pid_dir = Path.home() / ".symdex-mcp"
+    pid_dir.mkdir(parents=True, exist_ok=True)
+    pid_file = pid_dir / f"{repo}.watch.pid"
+    pid_file.write_text(str(os.getpid()))
+    logger.info("Created watcher pid file: %s", pid_file)
+
     logger.info("Initial index of %s ...", abs_path)
     index_folder(abs_path, repo)
 
@@ -124,3 +132,10 @@ def watch(
     finally:
         observer.stop()
         observer.join()
+        # Delete pid file on cleanup
+        try:
+            if pid_file.exists():
+                pid_file.unlink()
+                logger.info("Deleted watcher pid file: %s", pid_file)
+        except OSError as e:
+            logger.warning("Failed to delete pid file: %s", e)
