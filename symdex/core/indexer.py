@@ -9,6 +9,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from symdex.core.parser import parse_file
+from symdex.core.ignore import build_ignore_spec
 from symdex.graph.call_graph import extract_edges as _extract_edges
 from symdex.core.route_extractor import extract_routes as _extract_routes
 from symdex.core.storage import (
@@ -123,6 +124,7 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
 
     indexed = 0
     skipped = 0
+    ignore_spec = build_ignore_spec(abs_path)
 
     try:
         for dirpath, dirnames, filenames in os.walk(path):
@@ -135,6 +137,10 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
 
                 abs_file = os.path.join(dirpath, filename)
                 rel_file = os.path.relpath(abs_file, path).replace("\\", "/")
+
+                # Skip files matching ignore patterns
+                if ignore_spec.match_file(rel_file):
+                    continue
 
                 try:
                     current_hash = _sha256(abs_file)
