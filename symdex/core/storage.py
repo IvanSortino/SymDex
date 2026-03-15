@@ -435,3 +435,130 @@ def get_index_status(repo: str, db_path: str) -> dict:
         "stale": stale,
         "watcher_active": watcher_active,
     }
+
+
+def get_repo_stats(repo: str, db_path: str) -> dict:
+    """
+    Returns comprehensive statistics for a repo.
+
+    Fields:
+    - repo: str
+    - symbol_count: int (total symbols in repo)
+    - file_count: int (total files indexed in repo)
+    - language_distribution: dict (language -> count of symbols)
+    - top_fan_in: list[dict] (top 5 files with most dependents; each: {name, dependents})
+    - top_fan_out: list[dict] (top 5 files with most outgoing calls; each: {name, calls})
+    - orphan_files: list[str] (files with no symbols and no edges)
+    - circular_dep_count: int (number of distinct files in circular dependencies, or 0 if not computed)
+    - edge_count: int (total edges for this repo)
+    """
+    conn = get_connection(db_path)
+    try:
+        # 1. symbol_count
+        symbol_count = conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # 2. file_count
+        file_count = conn.execute(
+            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
+        ).fetchone()[0]
+
+        # 3. language_distribution: infer from file extension
+        file_rows = conn.execute(
+            "SELECT DISTINCT path FROM files WHERE repo=?", (repo,)
+        ).fetchall()
+
+        lang_dist = {}
+        ext_to_lang = {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".go": "go",
+            ".rs": "rust",
+            ".java": "java",
+            ".rb": "ruby",
+            ".cs": "csharp",
+            ".cpp": "cpp",
+            ".cc": "cpp",
+            ".c": "c",
+            ".ex": "elixir",
+            ".exs": "elixir",
+            ".php": "php",
+            ".dart": "dart",
+        }
+
+        for file_row in file_rows:
+            path = file_row["path"]
+            # Get extension, handle multi-dot extensions
+            if "." in path:
+                ext = "." + path.rsplit(".", 1)[-1]
+            else:
+                ext = ""
+            lang = ext_to_lang.get(ext, "other")
+            # Count symbols in this file
+            count = conn.execute(
+                "SELECT COUNT(*) FROM symbols WHERE repo=? AND file=?", (repo, path)
+            ).fetchone()[0]
+            if count > 0:
+                lang_dist[lang] = lang_dist.get(lang, 0) + count
+
+        # 4. top_fan_in: files with most dependents
+        fan_in_rows = conn.execute(
+            "SELECT callee_file, COUNT(*) as dependents FROM edges "
+            "WHERE callee_file IS NOT NULL "
+            "GROUP BY callee_file ORDER BY dependents DESC LIMIT 5"
+        ).fetchall()
+        top_fan_in = [
+            {"name": row["callee_file"], "dependents": row["dependents"]}
+            for row in fan_in_rows
+        ]
+
+        # 5. top_fan_out: files with most outgoing calls
+        # Join symbols to edges via caller_id, group by file, count edges
+        fan_out_rows = conn.execute(
+            "SELECT s.file, COUNT(*) as calls FROM edges e "
+            "JOIN symbols s ON e.caller_id = s.id "
+            "WHERE s.repo=? GROUP BY s.file ORDER BY calls DESC LIMIT 5",
+            (repo,),
+        ).fetchall()
+        top_fan_out = [
+            {"name": row["file"], "calls": row["calls"]}
+            for row in fan_out_rows
+        ]
+
+        # 6. orphan_files: files with no symbols and no edges
+        orphan_rows = conn.execute(
+            "SELECT f.path FROM files f "
+            "WHERE f.repo=? "
+            "AND NOT EXISTS (SELECT 1 FROM symbols s WHERE s.repo=f.repo AND s.file=f.path) "
+            "AND NOT EXISTS (SELECT 1 FROM edges e WHERE e.callee_file=f.path)",
+            (repo,),
+        ).fetchall()
+        orphan_files = [row["path"] for row in orphan_rows]
+
+        # 7. circular_dep_count: count distinct files involved in cycles
+        # For now, return 0 as a stub. Task 7 (find_circular_deps) will implement this.
+        circular_dep_count = 0
+
+        # 8. edge_count: total edges for this repo
+        edge_count = conn.execute(
+            "SELECT COUNT(*) FROM edges e "
+            "WHERE e.caller_id IN (SELECT id FROM symbols WHERE repo=?)",
+            (repo,),
+        ).fetchone()[0]
+
+    finally:
+        conn.close()
+
+    return {
+        "repo": repo,
+        "symbol_count": symbol_count,
+        "file_count": file_count,
+        "language_distribution": lang_dist,
+        "top_fan_in": top_fan_in,
+        "top_fan_out": top_fan_out,
+        "orphan_files": orphan_files,
+        "circular_dep_count": circular_dep_count,
+        "edge_count": edge_count,
+    }
