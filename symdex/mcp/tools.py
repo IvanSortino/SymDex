@@ -422,3 +422,22 @@ def get_graph_diagram_tool(
         ]
 
     return build_mermaid_diagram(edge_dicts, symbols_by_id, direction=direction)
+
+
+def find_circular_deps_tool(repo: str) -> dict:
+    """Detect circular dependencies in a repo's call graph.
+
+    Args:
+        repo: Repo name as registered with index_folder or index_repo.
+
+    Returns:
+        {"cycles": [[file1, file2, ...], ...], "count": N}
+        or {"error": {...}} if repo not indexed.
+    """
+    from symdex.graph.call_graph import find_circular_deps
+
+    if _get_root_path(repo) is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+
+    db_path = get_db_path(repo)
+    return find_circular_deps(repo, db_path)
