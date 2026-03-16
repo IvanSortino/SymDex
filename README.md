@@ -77,23 +77,28 @@ uvx symdex index . && uvx symdex serve
 ```bash
 # Install
 pip install symdex
-# OR: uvx symdex --help
+# OR
+uvx symdex --help
 
 # Index your project (run once; only changed files re-process on subsequent runs)
 symdex index ./myproject --name myproject
-# OR: uvx symdex index ./myproject --name myproject
+# OR
+uvx symdex index ./myproject --name myproject
 
 # Search by name
 symdex search "validate_email" --repo myproject
-# OR: uvx symdex search "validate_email" --repo myproject
+# OR
+uvx symdex search "validate_email" --repo myproject
 
 # Search by meaning (no name required)
 symdex semantic "check email format" --repo myproject
-# OR: uvx symdex semantic "check email format" --repo myproject
+# OR
+uvx symdex semantic "check email format" --repo myproject
 
 # Start the MCP server — your agent can now use all 20 tools
 symdex serve
-# OR: uvx symdex serve
+# OR
+uvx symdex serve
 ```
 
 Add to your agent config:
@@ -112,132 +117,65 @@ Add to your agent config:
 
 ## The problem
 
-Every time an AI agent needs to find a function, it reads the entire file that might contain it:
+AI agents often read entire files just to locate one function.
 
-```
-Agent: "I need to find validate_email."
-→ reads auth/utils.py        7,500 tokens
-→ reads auth/validators.py   6,200 tokens
-→ reads core/helpers.py      8,100 tokens
-→ finds it on the third try  21,800 tokens wasted
+```text
+Without indexing:
+- read auth/utils.py        ~7,500 tokens
+- read auth/validators.py   ~6,200 tokens
+- read core/helpers.py      ~8,100 tokens
+- find target on third try  ~21,800 tokens used
 ```
 
-On a real codebase, a single session can burn hundreds of thousands of tokens this way. SymDex pre-indexes the codebase so agents never read a full file to find a symbol again.
+SymDex pre-indexes your codebase, so agents jump straight to exact symbols and byte ranges.
 
-```
+```text
 With SymDex:
-→ search_symbols("validate_email")   ~200 tokens → exact file + byte offset
-→ get_symbol(file, start, end)       ~50 tokens  → only that function's source
-Total: ~250 tokens. Session after session.
+- search_symbols(...)       ~200 tokens
+- get_symbol(...)           ~50 tokens
+- total per lookup task     ~250 tokens
 ```
 
 ---
+
 
 ## What you get
 
-| | Feature | Details |
-|---|---|---|
-| 🔍 | **Symbol search** | Any function, class, or method — returns exact byte offsets |
-| 🧠 | **Semantic search** | Search by what code *does*, not what it is *called* |
-| 🔎 | **Text search** | Regex or literal across all indexed files — matching lines only |
-| 🕸️ | **Call graph** | Who calls this? What does it call? Pre-built at index time |
-| 🌐 | **HTTP routes** | Every API route extracted and searchable — no file reading needed |
-| 📄 | **File outline** | All symbols in a file without transferring file content |
-| 🗺️ | **Repo overview** | Directory structure + symbol statistics |
-| 👁️ | **Auto-watch** | Save a file — index updates. Delete a file — index removes it. |
-| 🗄️ | **Cross-repo registry** | One SymDex, many projects. Search all repos simultaneously. |
-| 🧹 | **Stale index GC** | `symdex gc` — removes orphaned databases from deleted worktrees |
-| ⌨️ | **Full CLI** | Every capability in the terminal, no agent required |
-| 🔌 | **20 MCP tools** | Every capability available to any MCP-compatible agent |
-| 🌍 | **14 languages** | Python · JS · TS · Go · Rust · Java · PHP · C# · C · C++ · Elixir · Ruby · Vue · more |
+| Feature | Details |
+|---|---|
+| **Symbol search** | Any function, class, or method with exact byte offsets |
+| **Semantic search** | Find code by intent, not exact name |
+| **Text search** | Regex or literal across indexed files |
+| **Call graph** | Callers, callees, circular dependency visibility |
+| **HTTP routes** | Extract and query API routes without opening files |
+| **File outline** | All symbols in one file without full file transfer |
+| **Repo overview** | Structure and symbol-level repository stats |
+| **Auto-watch** | Reindex on change; remove deleted files from index |
+| **Cross-repo registry** | Search and manage multiple projects from one tool |
+| **Stale index GC** | Clean orphaned index DBs after branch/worktree cleanup |
+| **CLI + MCP tools** | Full terminal and MCP workflows |
+| **Language support** | Python, JS, TS, Go, Rust, Java, PHP, C#, C/C++, Elixir, Ruby, Vue |
 
 ---
 
-## Token savings in practice
-
-```
-Finding and reading 3 related functions in a 10,000-line codebase:
-
-Without SymDex:
-  read auth/utils.py          7,500 tokens
-  read auth/validators.py     6,200 tokens
-  read core/helpers.py        8,100 tokens
-  ─────────────────────────────────────────
-  Total                      21,800 tokens
-
-With SymDex:
-  semantic_search(query)        200 tokens
-  get_symbol × 3               150 tokens
-  ─────────────────────────────────────────
-  Total                         350 tokens
-
-Savings: 21,450 tokens — 98% reduction — on one micro-task.
-```
-
-The savings compound. Every symbol lookup, every session, every agent.
-
----
 
 ## For AI Agents
 
-> **If you are an AI agent reading this:** Follow these rules to use SymDex correctly.
+<details>
+<summary><strong>Agent playbook (expand)</strong></summary>
 
-**Rule 1 — Index before anything else.**
-```json
-{ "tool": "index_folder", "path": "/path/to/project", "name": "myproject" }
-```
+- Index before querying: `index_folder`
+- Never read full files to find symbols; use `search_symbols`/`semantic_search` first
+- Retrieve source with byte ranges via `get_symbol`
+- Re-index after edits with `index_folder` or `invalidate_cache`
 
-**Rule 2 — Never read a full file to find a function.** Call `search_symbols` or `semantic_search` first. Use the returned byte offsets with `get_symbol`.
-
-**Rule 3 — Use the right tool.**
-
-| What you want | Tool |
-|---|---|
-| Find a function by name | `search_symbols` |
-| Read a function's source | `get_symbol` (byte offsets from search) |
-| Find by meaning / description | `semantic_search` |
-| All symbols in a file | `get_file_outline` |
-| Project structure | `get_repo_outline` |
-| Who calls a function | `get_callers` |
-| What a function calls | `get_callees` |
-| String or regex in code | `search_text` |
-| API routes in the repo | `search_routes` |
-| Check index freshness | `get_index_status` |
-| Architecture metrics (fan-in, orphans…) | `get_repo_stats` |
-| Visualize call graph as Mermaid | `get_graph_diagram` |
-| Detect circular imports/calls | `find_circular_deps` |
-| Remove orphaned indexes | `gc_stale_indexes` |
-
-**Rule 4 — Re-index after code changes.** Call `index_folder` again (or `invalidate_cache`) after modifying source files.
-
----
-
-## Real-world agent session
-
-```json
-// Step 1: Find the function
-{ "tool": "search_symbols", "query": "validate_email", "repo": "myproject" }
-// → { "file": "auth/utils.py", "start_byte": 1024, "end_byte": 1340 }   ~200 tokens
-
-// Step 2: Read only that function
-{ "tool": "get_symbol", "file": "auth/utils.py", "start_byte": 1024, "end_byte": 1340 }
-// → { "source": "def validate_email(email: str) -> bool: ..." }           ~50 tokens
-
-// Step 3: Check impact before changing it
-{ "tool": "get_callers", "name": "validate_email", "repo": "myproject" }
-// → { "callers": [{"name": "register_user", "file": "auth/views.py"}, ...] }  ~100 tokens
-
-// Step 4: When you don't know the name
-{ "tool": "semantic_search", "query": "check if user email is valid", "repo": "myproject" }
-// → finds validate_email with score 0.91                                   ~150 tokens
-
-// Total for the entire session: ~500 tokens
-// Without SymDex: ~25,000 tokens
-```
-
----
+</details>
 
 ## SymDex vs. everything else
+
+<p align="center">
+  <img src="docs/images/symdex-before-after.png" alt="At-a-glance comparison of token-heavy lookup vs SymDex indexed lookup" width="100%" />
+</p>
 
 | Capability | LSP | Serena | CodeGraphContext | SocratiCode | **SymDex** |
 |---|---|---|---|---|---|
@@ -279,182 +217,12 @@ SocratiCode does hybrid search and Mermaid graph visualization. Worth knowing ab
   <img src="docs/images/symdex-features-collage.png" alt="SymDex feature collage: symbol search, semantic search, call graph, routes, multi-repo, and watch mode" width="100%" />
 </p>
 
-### Semantic Search
-
-Every symbol's signature and docstring is embedded into a vector at index time. Search by what code does — not what it is called. Fully local, powered by `sentence-transformers`. No API calls. Nothing leaves your machine.
-
-```bash
-symdex semantic "parse and validate an authentication token" --repo myproject
-```
-
-```
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Name                 ┃ Kind     ┃ Score  ┃ File                   ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ verify_jwt           │ function │ 0.93   │ auth/tokens.py         │
-│ decode_bearer_token  │ function │ 0.87   │ middleware/auth.py      │
-└──────────────────────┴──────────┴────────┴────────────────────────┘
-```
-
-### Call Graph
-
-Who calls this function? What does it call? Extracted during indexing, answered instantly at query time — no file reading.
-
-```bash
-symdex callers process_payment --repo myproject   # impact analysis before changing
-symdex callees process_payment --repo myproject   # dependency trace
-```
-
-Via MCP:
-```json
-{ "tool": "get_callers", "name": "process_payment", "repo": "myproject" }
-```
-
-### HTTP Route Indexing
-
-API routes extracted from source during indexing. No more reading route files to understand an API surface.
-
-```bash
-symdex routes myproject               # all routes
-symdex routes myproject -m POST       # POST routes only
-symdex routes myproject -p /users     # routes matching path
-```
-
-Supports Flask · FastAPI · Django · Express.
-
-### Auto-Watch
-
-```bash
-symdex watch ./myproject
-```
-
-Save a file — SymDex reindexes it automatically. Delete a file — removed from the index. The agent always sees current code with no manual steps.
-
-### Cross-Repo Registry
-
-```bash
-symdex index ./frontend --name frontend
-symdex index ./backend  --name backend
-symdex search "validate_token"   # searches both simultaneously
-```
-
-Each repo gets its own SQLite database. The registry tracks all of them. Search scoped or global.
-
-### Graph Diagram (Mermaid)
-
-SymDex stores a call graph at index time. `get_graph_diagram` turns it into a Mermaid diagram that renders instantly inside Claude, GitHub, Cursor, and any Markdown viewer — no external tool needed.
-
-```json
-{ "tool": "get_graph_diagram", "repo": "myproject" }
-```
-
-```
-graph LR
-  n0["cli.py"] --> n1["core/indexer.py"]
-  n1 --> n2["core/storage.py"]
-  n2 -->|cycle| n1
-  style n0 fill:#3572A5
-  style n1 fill:#3572A5
-  style n2 fill:#3572A5
-```
-
-Cycle edges are highlighted in red automatically. Focus on a single file with `focus_file` and control graph depth with `depth`.
-
-### Circular Dependency Detection
-
-```json
-{ "tool": "find_circular_deps", "repo": "myproject" }
-```
-
-```json
-{
-  "cycles": [
-    ["auth/login.py", "auth/middleware.py", "auth/login.py"],
-    ["core/db.py", "core/models.py", "core/db.py"]
-  ],
-  "count": 2
-}
-```
-
-DFS over the call graph. Returns up to 20 distinct cycles, deduplicated and normalized.
-
-### Repo Stats
-
-Architecture overview without reading a single file:
-
-```json
-{ "tool": "get_repo_stats", "repo": "myproject" }
-```
-
-```json
-{
-  "symbol_count": 1420,
-  "file_count": 87,
-  "language_distribution": { "python": 60, "javascript": 20, "typescript": 7 },
-  "top_fan_in": [{ "name": "utils/helpers.py", "dependents": 34 }],
-  "top_fan_out": [{ "name": "cli.py", "calls": 45 }],
-  "orphan_files": ["scripts/old_migration.py"],
-  "circular_dep_count": 2,
-  "edge_count": 892
-}
-```
-
-### Index Status
-
-Before querying a large repo, agents can confirm the index is fresh:
-
-```json
-{ "tool": "get_index_status", "repo": "myproject" }
-```
-
-```json
-{
-  "symbol_count": 1420,
-  "file_count": 87,
-  "last_indexed": "2026-03-15T14:32:00Z",
-  "age_seconds": 3600,
-  "stale": false,
-  "watcher_active": true
-}
-```
-
-`stale` is `true` if any tracked file has been modified since the last index run.
-
-### `.symdexignore`
-
-Place a `.symdexignore` file at your project root to exclude paths from indexing — same format as `.gitignore`:
-
-```
-# .symdexignore
-generated/
-*.pb.go
-vendor/
-```
-
-Built-in defaults are always applied even without a `.symdexignore` file: `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/`, `*.min.js`, `*.pyc`, and more.
-
-### Stale Index GC
-
-Working with git worktrees or parallel agents? Deleted branches leave orphaned `.db` files.
-
-```bash
-symdex gc
-# Removed 3 stale indexes: task-auth, feature-payments, task-tests
-```
-
-Also available as MCP tool `gc_stale_indexes` for automated cleanup from within an agent session.
-
-### Auto-Name from Git Branch
-
-Inside a git worktree, `--name` is optional — SymDex reads the current branch name automatically:
-
-```bash
-git checkout -b feature/auth
-symdex index .
-# Indexed as: feature-auth
-```
-
----
+- **Semantic search**: find code by intent, not exact name.
+- **Byte-precise symbol extraction**: return only the exact symbol range agents need.
+- **Call graph + circular deps**: impact analysis and architecture debugging.
+- **HTTP route indexing**: query API surfaces without opening route files.
+- **Cross-repo registry**: one SymDex instance, many codebases.
+- **Auto-watch + incremental indexing**: keep index fresh with minimal reprocessing.
 
 ## MCP Tool Reference
 
