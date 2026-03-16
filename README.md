@@ -141,6 +141,10 @@ With SymDex:
 
 ## What you get
 
+<p align="center">
+  <img src="docs/images/what-you-get-grid.png" alt="SymDex feature grid showing core capabilities including semantic search, byte-precise extraction, call graph, routes, cross-repo registry, watch mode, and CLI plus MCP tools" width="100%" />
+</p>
+
 | Feature | Details |
 |---|---|
 | **Symbol search** | Any function, class, or method with exact byte offsets |
@@ -174,7 +178,7 @@ With SymDex:
 ## SymDex vs. everything else
 
 <p align="center">
-  <img src="docs/images/symdex-before-after.png" alt="At-a-glance comparison of token-heavy lookup vs SymDex indexed lookup" width="100%" />
+  <img src="docs/images/comparison-matrix.png" alt="SymDex versus alternatives comparison matrix across semantic search, byte-precise extraction, route indexing, zero infrastructure, cross-repo support, and CLI plus MCP coverage" width="100%" />
 </p>
 
 | Capability | LSP | Serena | CodeGraphContext | SocratiCode | **SymDex** |
@@ -192,6 +196,15 @@ With SymDex:
 | one command and done | No | No | No | No (npm + Docker) | **Yes** |
 | License | varies | MIT | MIT | AGPL-3.0 | **MIT** |
 | Works offline | Yes | Yes | Yes | Yes | **Yes** |
+
+<details>
+<summary><strong>Compact vertical comparison (optional view)</strong></summary>
+
+<p align="center">
+  <img src="docs/images/comparison-matrix-vertical.png" alt="Vertical compact SymDex comparison matrix for narrow screen viewing" width="420" />
+</p>
+
+</details>
 
 ### vs. LSP (pylsp, tsserver, rust-analyzer)
 
