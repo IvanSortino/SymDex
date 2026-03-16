@@ -29,6 +29,9 @@
 
 <h2 align="center">7,500 tokens → 200 tokens</h2>
 <p align="center"><strong>Per lookup. Every lookup. 97% reduction.</strong></p>
+<p align="center">
+  <img src="docs/images/symdex-hero-16x9.png" alt="SymDex hero visual showing token reduction and code intelligence workflow" width="100%" />
+</p>
 
 ```bash
 # Install with pip
@@ -271,6 +274,10 @@ SocratiCode does hybrid search and Mermaid graph visualization. Worth knowing ab
 ---
 
 ## Features in depth
+
+<p align="center">
+  <img src="docs/images/symdex-features-collage.png" alt="SymDex feature collage: symbol search, semantic search, call graph, routes, multi-repo, and watch mode" width="100%" />
+</p>
 
 ### Semantic Search
 
@@ -604,6 +611,10 @@ Requires Python 3.11+. No Docker. No external database. No API keys.
 
 ## Architecture
 
+<p align="center">
+  <img src="docs/images/symdex-architecture.png" alt="SymDex architecture diagram from MCP tools to SQLite index, embeddings, and tree-sitter parser" width="100%" />
+</p>
+
 ```
 User / AI Agent
       │
@@ -646,6 +657,10 @@ User / AI Agent
 ---
 
 ## FAQ
+
+<p align="center">
+  <img src="docs/images/symdex-before-after.png" alt="Before and after comparison showing token-heavy code lookup versus SymDex efficient lookup" width="100%" />
+</p>
 
 **Does semantic search require an internet connection?**
 No. The embedding model downloads once on first use and runs fully offline after that. No API keys, no data leaves your machine.
