@@ -14,15 +14,32 @@ import sqlite_vec
 DEFAULT_SYMBOL_LIMIT = 20
 
 
+def _try_load_sqlite_vec(conn: sqlite3.Connection) -> bool:
+    """Best-effort sqlite-vec load; returns True when extension is active."""
+    enable_load_extension = getattr(conn, "enable_load_extension", None)
+    if not callable(enable_load_extension):
+        return False
+
+    try:
+        enable_load_extension(True)
+        sqlite_vec.load(conn)
+        return True
+    except (sqlite3.Error, AttributeError):
+        return False
+    finally:
+        try:
+            enable_load_extension(False)
+        except (sqlite3.Error, AttributeError):
+            pass
+
+
 def get_connection(db_path: str) -> sqlite3.Connection:
     """Open or create a SQLite DB, apply schema, enable WAL mode."""
     parent = os.path.dirname(db_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.enable_load_extension(True)
-    sqlite_vec.load(conn)
-    conn.enable_load_extension(False)
+    _try_load_sqlite_vec(conn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

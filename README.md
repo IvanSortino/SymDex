@@ -32,7 +32,11 @@
 ```
 
 ```bash
+# Install with pip
 pip install symdex
+
+# Or run with uvx (no install step)
+uvx symdex --help
 ```
 
 </div>
@@ -61,7 +65,7 @@ The agent reads 316 bytes. Not 7,500. The index tells it exactly where to look.
 
 **3. Zero infrastructure — one SQLite file per repo, no Docker, no server, no setup.**
 ```bash
-pip install symdex && symdex index . && symdex serve
+uvx symdex index . && uvx symdex serve
 ```
 
 ---
@@ -71,18 +75,23 @@ pip install symdex && symdex index . && symdex serve
 ```bash
 # Install
 pip install symdex
+# OR: uvx symdex --help
 
 # Index your project (run once; only changed files re-process on subsequent runs)
 symdex index ./myproject --name myproject
+# OR: uvx symdex index ./myproject --name myproject
 
 # Search by name
 symdex search "validate_email" --repo myproject
+# OR: uvx symdex search "validate_email" --repo myproject
 
 # Search by meaning (no name required)
 symdex semantic "check email format" --repo myproject
+# OR: uvx symdex semantic "check email format" --repo myproject
 
 # Start the MCP server — your agent can now use all 20 tools
 symdex serve
+# OR: uvx symdex serve
 ```
 
 Add to your agent config:
@@ -90,8 +99,8 @@ Add to your agent config:
 {
   "mcpServers": {
     "symdex": {
-      "command": "symdex",
-      "args": ["serve"]
+      "command": "uvx",
+      "args": ["symdex", "serve"]
     }
   }
 }
@@ -240,7 +249,7 @@ The savings compound. Every symbol lookup, every session, every agent.
 | Works without an editor | No | No | No | Yes | **Yes** |
 | Full CLI (non-agent access) | No | No | No | No | **Yes** |
 | Zero infrastructure | Partial | Yes | No (graph DB) | No (Docker) | **Yes — one SQLite file** |
-| pip install and done | No | No | No | No (npm + Docker) | **Yes** |
+| one command and done | No | No | No | No (npm + Docker) | **Yes** |
 | License | varies | MIT | MIT | AGPL-3.0 | **MIT** |
 | Works offline | Yes | Yes | Yes | Yes | **Yes** |
 
@@ -537,7 +546,7 @@ Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) — the sam
 | Platform | How to connect |
 |----------|---------------|
 | MCP desktop client | Add to `mcp_client_config.json` |
-| MCP client Code | `mcp-client add symdex -- symdex serve` |
+| MCP client Code | `mcp-client add symdex -- uvx symdex serve` |
 | Codex CLI | Add to MCP settings |
 | Gemini CLI | Add to MCP settings |
 | Cursor | `.cursor/mcp.json` |
@@ -555,8 +564,8 @@ Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) — the sam
 {
   "mcpServers": {
     "symdex": {
-      "command": "symdex",
-      "args": ["serve"]
+      "command": "uvx",
+      "args": ["symdex", "serve"]
     }
   }
 }
@@ -578,7 +587,16 @@ HTTP mode (remote agents):
 ## Installation
 
 ```bash
+# Method 1: pip
 pip install symdex
+symdex --help
+
+# Method 2: uv tool install (isolated managed tool env)
+uv tool install symdex
+symdex --help
+
+# Method 3: uvx (ephemeral isolated run; no install step)
+uvx symdex --help
 ```
 
 Requires Python 3.11+. No Docker. No external database. No API keys.
@@ -634,7 +652,7 @@ User / AI Agent
 No. The embedding model downloads once on first use and runs fully offline after that. No API keys, no data leaves your machine.
 
 **I see HuggingFace warnings in Roo / KiloCode on first use. Is that normal?**
-Not anymore. v0.1.7 suppresses all HuggingFace Hub noise at startup (progress bars, token warnings, login advisories). If you are on an older version, `pip install --upgrade symdex` fixes it.
+Not anymore. v0.1.7 suppresses all HuggingFace Hub noise at startup (progress bars, token warnings, login advisories). If you are on an older version, upgrade (`uv tool upgrade symdex` or `pip install --upgrade symdex`).
 
 **How long does indexing take?**
 A typical 50-file Python project indexes in 2–5 seconds. Incremental re-indexing after a file change takes under a second for that file alone.
@@ -684,7 +702,7 @@ Yes — every capability is available via CLI. SymDex is useful as a developer t
 - **Git worktree support** — `symdex index .` inside any git repo auto-names from the current branch (`feature/auth` → `feature-auth`). No `--name` flag needed.
 - **`symdex gc`** — scans the registry, removes `.db` files for repos whose root directories no longer exist on disk. One command cleans up after deleted branches and worktrees.
 - **`gc_stale_indexes` MCP tool** — same cleanup available to agents mid-session.
-- **Bug fix** — `schema.sql` was missing from the PyPI wheel. Incremental re-index now works correctly after `pip install`.
+- **Bug fix** — `schema.sql` was missing from the PyPI wheel. Incremental re-index now works correctly after install.
 
 ### v0.1.3
 - **`symdex watch`** — auto-reindex on file save and delete using native OS watchers. No polling.

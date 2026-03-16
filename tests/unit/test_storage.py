@@ -39,6 +39,34 @@ def test_get_connection_creates_all_tables(tmp_path):
     conn.close()
 
 
+def test_get_connection_works_without_enable_load_extension(tmp_path, monkeypatch):
+    """Connection setup should work on Python builds without extension loading APIs."""
+    from symdex.core import storage as storage_mod
+
+    real_connect = storage_mod.sqlite3.connect
+
+    class ConnectionProxy:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def __getattr__(self, name):
+            if name == "enable_load_extension":
+                raise AttributeError("enable_load_extension not available")
+            return getattr(self._wrapped, name)
+
+    monkeypatch.setattr(
+        storage_mod.sqlite3,
+        "connect",
+        lambda *args, **kwargs: ConnectionProxy(real_connect(*args, **kwargs)),
+    )
+
+    db_file = str(tmp_path / "noext.db")
+    conn = get_connection(db_file)
+    count = conn.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()[0]
+    assert count >= 1
+    conn.close()
+
+
 def test_upsert_symbol_and_query_back(tmp_db):
     sym_id = upsert_symbol(
         tmp_db,
