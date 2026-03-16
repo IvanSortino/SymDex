@@ -27,9 +27,8 @@
 
 <br>
 
-```
-7,500 tokens → 200 tokens. Per lookup. Every lookup. 97% reduction.
-```
+<h2 align="center">7,500 tokens → 200 tokens</h2>
+<p align="center"><strong>Per lookup. Every lookup. 97% reduction.</strong></p>
 
 ```bash
 # Install with pip
