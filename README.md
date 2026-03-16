@@ -330,6 +330,8 @@ Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) — the sam
 
 ## Supported Platforms
 
+**Quick view:** `Claude Desktop` · `Claude Code` · `Codex CLI` · `Gemini CLI` · `Cursor` · `Windsurf` · `GitHub Copilot` · `Roo` · `Continue.dev` · `Cline` · `Kilo Code` · `Zed` · `OpenCode` · `Any MCP client`
+
 | Platform | How to connect |
 |----------|---------------|
 | Claude Desktop | Add to `claude_desktop_config.json` |
