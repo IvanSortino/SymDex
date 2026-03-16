@@ -42,7 +42,7 @@ uvx symdex --help
 
 ---
 
-> **What's new in v0.1.7** — Graph visualization (`get_graph_diagram` → instant Mermaid in MCP client/GitHub/Cursor), circular dep detection, repo architecture stats, index status check, `.symdexignore` support, HF Hub noise fixed for Roo/KiloCode users, improved semantic recall. [See full changelog →](#changelog)
+> **What's new in v0.1.8** — SQLite extension loading is now optional (fixes Python builds without `enable_load_extension`), install docs now show pip and uv/uvx equally, and CI now includes a regression test for the sqlite-extension fallback path. [See full changelog →](#changelog)
 
 ---
 
@@ -687,7 +687,13 @@ Yes — every capability is available via CLI. SymDex is useful as a developer t
 
 ## Changelog
 
-### v0.1.7 — current
+### v0.1.8 — current
+- **SQLite compatibility fix** — SymDex no longer crashes on Python builds where `sqlite3.Connection.enable_load_extension` is unavailable. Extension loading is now best-effort and safely skipped when unsupported.
+- **Regression test added** — `test_get_connection_works_without_enable_load_extension` protects this compatibility path.
+- **CI guard added** — new workflow runs the sqlite-extension regression test on PRs and pushes to prevent reintroducing the crash.
+- **Install docs parity** — README now presents `pip`, `uv tool install`, and `uvx` as equal first-class installation methods.
+
+### v0.1.7
 - **`get_graph_diagram`** — generates a Mermaid call graph from the index. Renders in MCP client, GitHub, Cursor, any Markdown viewer. Language-coloured nodes, cycle edges highlighted in red, `focus_file` + `depth` for subgraph zoom.
 - **`find_circular_deps`** — DFS over the call graph. Returns up to 20 distinct circular import/call chains.
 - **`get_repo_stats`** — architecture overview: fan-in, fan-out, orphan files, language distribution, edge count, circular dep count.
