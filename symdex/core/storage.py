@@ -39,7 +39,7 @@ _EXT_TO_LANGUAGE = {
 def _ensure_files_line_count_column(conn: sqlite3.Connection) -> None:
     """Add files.line_count for older databases that do not have it yet."""
     columns = {
-        row["name"]
+        row[1]
         for row in conn.execute("PRAGMA table_info(files)").fetchall()
     }
     if "line_count" not in columns:
