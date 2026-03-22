@@ -56,7 +56,7 @@ def test_watch_reindexes_new_file(tmp_path):
              patch("symdex.core.indexer.get_db_path", side_effect=mock_db_path), \
              patch("symdex.core.storage.get_db_path", side_effect=mock_db_path), \
              patch("symdex.core.watcher.get_db_path", side_effect=mock_db_path):
-            watch(str(repo_dir), name="test_watch", interval=0.5, stop_event=stop)
+            watch(str(repo_dir), repo="test_watch", interval=0.5, stop_event=stop)
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
@@ -94,7 +94,7 @@ def test_watch_removes_deleted_file(tmp_path):
              patch("symdex.core.indexer.get_db_path", side_effect=mock_db_path), \
              patch("symdex.core.storage.get_db_path", side_effect=mock_db_path), \
              patch("symdex.core.watcher.get_db_path", side_effect=mock_db_path):
-            watch(str(repo_dir), name="test_watch_del", interval=0.5, stop_event=stop)
+            watch(str(repo_dir), repo="test_watch_del", interval=0.5, stop_event=stop)
 
     t = threading.Thread(target=run, daemon=True)
     t.start()

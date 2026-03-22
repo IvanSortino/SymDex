@@ -64,7 +64,7 @@ def indexed(tmp_path):
         'class DeltaClass:\n'
         '    pass\n'
     )
-    result = index_folder_tool(path=str(src), name="tools_repo")
+    result = index_folder_tool(path=str(src), repo="tools_repo")
     assert "indexed" in result, f"index failed: {result}"
     return {"path": str(src), "repo": "tools_repo"}
 
@@ -81,6 +81,13 @@ def test_search_symbols_cross_repo_found(indexed):
     resp = search_symbols_tool(query="gamma_func", repo=None)
     # Either finds across registered repos or returns 404 — both are valid paths
     assert "symbols" in resp or "error" in resp
+
+
+def test_search_symbols_returns_roi_summary(indexed):
+    resp = search_symbols_tool(query="gamma_func", repo=indexed["repo"])
+    assert "roi" in resp
+    assert resp["roi"]["tokenizer"] == "o200k_base"
+    assert resp["roi"]["estimated_tokens_saved"] >= 0
 
 
 # ── get_symbol_tool ───────────────────────────────────────────────────────────
@@ -124,6 +131,13 @@ def test_search_text_found(indexed):
     assert "matches" in resp
 
 
+def test_search_text_returns_roi_summary(indexed):
+    resp = search_text_tool(query="gamma", repo=indexed["repo"])
+    assert "roi" in resp
+    assert resp["roi"]["tokenizer"] == "o200k_base"
+    assert resp["roi"]["estimated_tokens_saved"] >= 0
+
+
 # ── get_file_tree_tool ────────────────────────────────────────────────────────
 
 def test_get_file_tree_repo_not_indexed():
@@ -157,14 +171,21 @@ def test_get_symbols_found(indexed):
 # ── index_repo_tool ───────────────────────────────────────────────────────────
 
 def test_index_repo_bad_path():
-    resp = index_repo_tool(name="x", path="/nonexistent/path/abc")
+    resp = index_repo_tool(path="/nonexistent/path/abc", repo="x")
     assert resp["error"]["code"] == 400
 
 
 def test_index_repo_success(indexed):
-    resp = index_repo_tool(name="tools_repo2", path=indexed["path"])
+    resp = index_repo_tool(path=indexed["path"], repo="tools_repo2")
     assert "indexed" in resp
     assert "repo" in resp
+
+
+def test_index_folder_includes_code_summary(indexed):
+    resp = index_folder_tool(path=indexed["path"], repo=indexed["repo"])
+    assert "summary" in resp
+    assert resp["summary"]["lines_of_code"] > 0
+    assert resp["summary"]["functions"] > 0
 
 
 # ── invalidate_cache_tool ─────────────────────────────────────────────────────

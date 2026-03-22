@@ -14,6 +14,39 @@ import sqlite_vec
 DEFAULT_SYMBOL_LIMIT = 20
 
 
+_EXT_TO_LANGUAGE = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".rb": "ruby",
+    ".cs": "csharp",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".c": "c",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".php": "php",
+    ".dart": "dart",
+    ".mjs": "javascript",
+    ".jsx": "javascript",
+    ".tsx": "typescript",
+}
+
+
+def _ensure_files_line_count_column(conn: sqlite3.Connection) -> None:
+    """Add files.line_count for older databases that do not have it yet."""
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(files)").fetchall()
+    }
+    if "line_count" not in columns:
+        conn.execute("ALTER TABLE files ADD COLUMN line_count INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+
+
 def _try_load_sqlite_vec(conn: sqlite3.Connection) -> bool:
     """Best-effort sqlite-vec load; returns True when extension is active."""
     enable_load_extension = getattr(conn, "enable_load_extension", None)
@@ -45,6 +78,7 @@ def get_connection(db_path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     schema_path = pathlib.Path(__file__).parent / "schema.sql"
     conn.executescript(schema_path.read_text())
+    _ensure_files_line_count_column(conn)
     conn.commit()
     return conn
 
@@ -76,11 +110,17 @@ def upsert_symbol(
     return cursor.lastrowid
 
 
-def upsert_file(conn: sqlite3.Connection, repo: str, path: str, file_hash: str) -> None:
+def upsert_file(
+    conn: sqlite3.Connection,
+    repo: str,
+    path: str,
+    file_hash: str,
+    line_count: int = 0,
+) -> None:
     """Insert or replace a file hash record."""
     conn.execute(
-        "INSERT OR REPLACE INTO files (repo, path, hash) VALUES (?, ?, ?)",
-        (repo, path, file_hash),
+        "INSERT OR REPLACE INTO files (repo, path, hash, line_count) VALUES (?, ?, ?, ?)",
+        (repo, path, file_hash, line_count),
     )
     conn.commit()
 
@@ -342,6 +382,65 @@ def delete_file_routes(conn: sqlite3.Connection, repo: str, file: str) -> None:
     conn.execute("DELETE FROM routes WHERE repo=? AND file=?", (repo, file))
 
 
+def _repo_language_distribution(conn: sqlite3.Connection, repo: str) -> dict[str, int]:
+    """Infer language distribution from indexed file extensions."""
+    rows = conn.execute(
+        "SELECT DISTINCT path FROM files WHERE repo=?",
+        (repo,),
+    ).fetchall()
+    language_distribution: dict[str, int] = {}
+    for row in rows:
+        path = row["path"]
+        ext = os.path.splitext(path)[1].lower()
+        language = _EXT_TO_LANGUAGE.get(ext, "other")
+        language_distribution[language] = language_distribution.get(language, 0) + 1
+    return dict(sorted(language_distribution.items()))
+
+
+def get_repo_summary(repo: str, db_path: str) -> dict:
+    """Return code-summary counts for a repo."""
+    conn = get_connection(db_path)
+    try:
+        file_count = conn.execute(
+            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?",
+            (repo,),
+        ).fetchone()[0]
+        symbol_count = conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo=?",
+            (repo,),
+        ).fetchone()[0]
+        lines_of_code = conn.execute(
+            "SELECT COALESCE(SUM(line_count), 0) FROM files WHERE repo=?",
+            (repo,),
+        ).fetchone()[0]
+        kind_rows = conn.execute(
+            "SELECT kind, COUNT(*) AS count FROM symbols WHERE repo=? GROUP BY kind",
+            (repo,),
+        ).fetchall()
+        kind_counts = {row["kind"]: row["count"] for row in kind_rows}
+        routes_count = conn.execute(
+            "SELECT COUNT(*) FROM routes WHERE repo=?",
+            (repo,),
+        ).fetchone()[0]
+        language_distribution = _repo_language_distribution(conn, repo)
+    finally:
+        conn.close()
+
+    return {
+        "repo": repo,
+        "file_count": file_count,
+        "symbol_count": symbol_count,
+        "lines_of_code": lines_of_code,
+        "functions": kind_counts.get("function", 0),
+        "classes": kind_counts.get("class", 0),
+        "methods": kind_counts.get("method", 0),
+        "constants": kind_counts.get("constant", 0),
+        "variables": kind_counts.get("variable", 0),
+        "routes": routes_count,
+        "language_distribution": language_distribution,
+    }
+
+
 def get_index_status(repo: str, db_path: str) -> dict:
     """
     Returns index status for a repo.
@@ -443,10 +542,16 @@ def get_index_status(repo: str, db_path: str) -> dict:
     finally:
         conn.close()
 
+    lines_of_code = conn.execute(
+        "SELECT COALESCE(SUM(line_count), 0) FROM files WHERE repo=?",
+        (repo,),
+    ).fetchone()[0]
+
     return {
         "repo": repo,
         "symbol_count": symbol_count,
         "file_count": file_count,
+        "lines_of_code": lines_of_code,
         "last_indexed": last_indexed_str,
         "age_seconds": age_seconds,
         "stale": stale,
@@ -471,54 +576,11 @@ def get_repo_stats(repo: str, db_path: str) -> dict:
     """
     conn = get_connection(db_path)
     try:
-        # 1. symbol_count
-        symbol_count = conn.execute(
-            "SELECT COUNT(*) FROM symbols WHERE repo=?", (repo,)
-        ).fetchone()[0]
-
-        # 2. file_count
-        file_count = conn.execute(
-            "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
-        ).fetchone()[0]
-
-        # 3. language_distribution: infer from file extension
-        file_rows = conn.execute(
-            "SELECT DISTINCT path FROM files WHERE repo=?", (repo,)
-        ).fetchall()
-
-        lang_dist = {}
-        ext_to_lang = {
-            ".py": "python",
-            ".js": "javascript",
-            ".ts": "typescript",
-            ".go": "go",
-            ".rs": "rust",
-            ".java": "java",
-            ".rb": "ruby",
-            ".cs": "csharp",
-            ".cpp": "cpp",
-            ".cc": "cpp",
-            ".c": "c",
-            ".ex": "elixir",
-            ".exs": "elixir",
-            ".php": "php",
-            ".dart": "dart",
-        }
-
-        for file_row in file_rows:
-            path = file_row["path"]
-            # Get extension, handle multi-dot extensions
-            if "." in path:
-                ext = "." + path.rsplit(".", 1)[-1]
-            else:
-                ext = ""
-            lang = ext_to_lang.get(ext, "other")
-            # Count symbols in this file
-            count = conn.execute(
-                "SELECT COUNT(*) FROM symbols WHERE repo=? AND file=?", (repo, path)
-            ).fetchone()[0]
-            if count > 0:
-                lang_dist[lang] = lang_dist.get(lang, 0) + count
+        summary = get_repo_summary(repo, db_path)
+        symbol_count = summary["symbol_count"]
+        file_count = summary["file_count"]
+        lines_of_code = summary["lines_of_code"]
+        lang_dist = summary["language_distribution"]
 
         # 4. top_fan_in: files with most dependents (filtered to this repo via caller)
         fan_in_rows = conn.execute(
@@ -579,6 +641,7 @@ def get_repo_stats(repo: str, db_path: str) -> dict:
         "repo": repo,
         "symbol_count": symbol_count,
         "file_count": file_count,
+        "lines_of_code": lines_of_code,
         "language_distribution": lang_dist,
         "top_fan_in": top_fan_in,
         "top_fan_out": top_fan_out,

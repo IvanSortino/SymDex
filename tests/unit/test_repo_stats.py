@@ -95,6 +95,7 @@ def test_get_repo_stats_returns_fields():
         assert "repo" in resp
         assert "symbol_count" in resp
         assert "file_count" in resp
+        assert "lines_of_code" in resp
         assert "language_distribution" in resp
         assert "top_fan_in" in resp
         assert "top_fan_out" in resp
@@ -108,6 +109,8 @@ def test_get_repo_stats_returns_fields():
         assert resp["symbol_count"] > 0  # We indexed functions
         assert isinstance(resp["file_count"], int)
         assert resp["file_count"] > 0  # At least 2 Python + 1 JS files
+        assert isinstance(resp["lines_of_code"], int)
+        assert resp["lines_of_code"] > 0
         assert isinstance(resp["language_distribution"], dict)
         assert "python" in resp["language_distribution"]
         assert resp["language_distribution"]["python"] > 0

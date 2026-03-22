@@ -10,6 +10,7 @@ from symdex.core.storage import (
     get_db_path,
     get_index_status,
     get_registry_path,  # noqa: F401 — imported so tests can monkeypatch this module's reference
+    get_repo_summary,
     get_repo_stats,
     get_stale_repos,
     query_file_symbols,
@@ -18,6 +19,7 @@ from symdex.core.storage import (
     upsert_repo,
     search_text_in_index,
 )
+from symdex.core.token_metrics import build_search_roi_summary_from_rows
 from symdex.search.symbol_search import search_symbols as _search_symbols
 
 
@@ -54,16 +56,17 @@ def _build_tree(root: str, prefix: str = "", depth: int = 3, current_depth: int 
     return "\n".join(lines)
 
 
-def index_folder_tool(path: str, name: str | None = None) -> dict:
+def index_folder_tool(path: str, repo: str | None = None, name: str | None = None) -> dict:
     if not os.path.isdir(path):
         return _err(400, "invalid_request", f"Path does not exist or is not a directory: {path}")
-    result = _index_folder(path, name=name)
+    result = _index_folder(path, repo=repo, name=name)
     upsert_repo(result.repo, root_path=os.path.abspath(path), db_path=result.db_path)
     return {
         "repo": result.repo,
         "db_path": result.db_path,
         "indexed": result.indexed_count,
         "skipped": result.skipped_count,
+        "summary": result.summary,
     }
 
 
@@ -86,11 +89,22 @@ def search_symbols_tool(
     conn = get_connection(get_db_path(repo))
     try:
         symbols = _search_symbols(conn, repo=repo, query=query, kind=kind, limit=limit)
+        root = _get_root_path(repo) or ""
+        roi = build_search_roi_summary_from_rows(
+            conn,
+            repo=repo,
+            rows=symbols,
+            repo_root=root,
+            result_kind="symbol",
+        ) if symbols and root else None
     finally:
         conn.close()
     if not symbols:
         return _err(404, "symbol_not_found", f"No symbols matching: {query}")
-    return {"symbols": symbols}
+    response = {"symbols": symbols}
+    if roi is not None:
+        response["roi"] = roi
+    return response
 
 
 def get_symbol_tool(repo: str, file: str, start_byte: int, end_byte: int) -> dict:
@@ -146,10 +160,13 @@ def get_repo_outline_tool(repo: str) -> dict:
     finally:
         conn.close()
     tree = _build_tree(root, depth=3)
+    summary = get_repo_summary(repo, get_db_path(repo))
+    summary["files"] = file_count
+    summary["symbols"] = symbol_count
     return {
         "repo": repo,
         "tree": tree,
-        "stats": {"files": file_count, "symbols": symbol_count},
+        "stats": summary,
     }
 
 
@@ -170,9 +187,19 @@ def search_text_tool(
         matches = search_text_in_index(
             conn, repo=repo, query=query, repo_root=root, file_pattern=file_pattern
         )
+        roi = build_search_roi_summary_from_rows(
+            conn,
+            repo=repo,
+            rows=matches,
+            repo_root=root,
+            result_kind="text",
+        ) if matches else None
     finally:
         conn.close()
-    return {"matches": matches}
+    response = {"matches": matches}
+    if roi is not None:
+        response["roi"] = roi
+    return response
 
 
 def get_file_tree_tool(repo: str, depth: int = 3) -> dict:
@@ -212,16 +239,17 @@ def get_symbols_tool(names: list[str], repo: str | None = None) -> dict:
     return {"symbols": all_symbols}
 
 
-def index_repo_tool(name: str, path: str) -> dict:
+def index_repo_tool(path: str, repo: str | None = None, name: str | None = None) -> dict:
     if not os.path.isdir(path):
         return _err(400, "invalid_request", f"Path does not exist or is not a directory: {path}")
-    result = _index_folder(path, name=name)
-    upsert_repo(name, root_path=os.path.abspath(path), db_path=result.db_path)
+    result = _index_folder(path, repo=repo, name=name)
+    upsert_repo(result.repo, root_path=os.path.abspath(path), db_path=result.db_path)
     return {
         "repo": result.repo,
         "db_path": result.db_path,
         "indexed": result.indexed_count,
         "skipped": result.skipped_count,
+        "summary": result.summary,
     }
 
 
@@ -243,11 +271,22 @@ def semantic_search_tool(query: str, repo: str | None = None, limit: int = 10) -
     conn = get_connection(get_db_path(repo))
     try:
         results = search_semantic(conn, query=query, repo=repo, limit=limit)
+        root = _get_root_path(repo) or ""
+        roi = build_search_roi_summary_from_rows(
+            conn,
+            repo=repo,
+            rows=results,
+            repo_root=root,
+            result_kind="symbol",
+        ) if results and root else None
     except Exception as exc:
         return _err(500, "embedding_error", str(exc))
     finally:
         conn.close()
-    return {"symbols": results}
+    response = {"symbols": results}
+    if roi is not None:
+        response["roi"] = roi
+    return response
 
 
 def get_callers_tool(name: str, repo: str) -> dict:

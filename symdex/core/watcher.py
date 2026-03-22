@@ -14,6 +14,7 @@ from typing import Optional
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 
+from symdex.core.naming import derive_repo_name
 from symdex.core.indexer import index_folder, _SKIP_DIRS, _SKIP_EXTENSIONS
 from symdex.core.storage import get_db_path, get_connection
 
@@ -83,6 +84,7 @@ class _Handler(FileSystemEventHandler):
 
 def watch(
     path: str,
+    repo: Optional[str] = None,
     name: Optional[str] = None,
     interval: float = 5.0,
     stop_event: Optional[threading.Event] = None,
@@ -94,12 +96,14 @@ def watch(
 
     Args:
         path: Absolute or relative path to the directory to watch.
-        name: Repo name. Defaults to folder basename.
+        repo: Repo name override. When omitted, a stable repo name is derived
+            from the folder name, git branch (if available), and path hash.
+        name: Backward-compatible alias for repo.
         interval: Seconds between flush cycles.
         stop_event: Optional threading.Event to signal shutdown.
     """
     abs_path = os.path.abspath(path)
-    repo = (name or os.path.basename(abs_path)).lower()
+    repo = derive_repo_name(abs_path, repo=repo, name=name)
 
     # Create pid file to signal watcher is active
     pid_dir = Path.home() / ".symdex-mcp"
@@ -109,7 +113,7 @@ def watch(
     logger.info("Created watcher pid file: %s", pid_file)
 
     logger.info("Initial index of %s ...", abs_path)
-    index_folder(abs_path, repo)
+    index_folder(abs_path, repo=repo)
 
     handler = _Handler(abs_path, repo)
     observer = Observer()
@@ -127,7 +131,7 @@ def watch(
 
             if changed:
                 logger.info("Re-indexing %d changed file(s) ...", len(changed))
-                index_folder(abs_path, repo)
+                index_folder(abs_path, repo=repo)
 
     finally:
         observer.stop()
