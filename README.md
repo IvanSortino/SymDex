@@ -45,6 +45,24 @@ uvx symdex --help
 
 ---
 
+## SymDex Skill For Agents
+
+Install the SymDex code-search skill to make agents use SymDex first for code exploration:
+
+```bash
+npx skills add husnainpk/SymDex --skill symdex-code-search
+```
+
+What it does:
+- Uses SymDex before Read/Grep/Glob for code discovery
+- Checks index freshness first
+- Searches by symbol, intent, routes, callers, and callees
+- Reads only the exact symbol or file slice needed
+
+The skill lives in this repo at `skills/symdex-code-search/SKILL.md`.
+
+---
+
 > **Current branch updates** — repo names now auto-derive from git branch plus a short path hash when `--repo` is omitted, `--repo` is the canonical flag everywhere, and successful searches print approximate token savings. [See full changelog →](#changelog)
 
 ---
