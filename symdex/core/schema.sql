@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS files (
     repo        TEXT NOT NULL,
     path        TEXT NOT NULL,
     hash        TEXT NOT NULL,
+    line_count  INTEGER NOT NULL DEFAULT 0,
     indexed_at  DATETIME NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (repo, path)
 );

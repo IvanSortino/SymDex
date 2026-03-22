@@ -24,6 +24,7 @@ from symdex.core.storage import (
     search_text_in_index,
     upsert_repo,
 )
+from symdex.core.token_metrics import build_search_roi_summary_from_rows
 from symdex.search.symbol_search import search_symbols as _search_symbols
 
 app = typer.Typer(name="symdex", help="SymDex — universal code indexer")
@@ -31,16 +32,87 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+def _format_language_breakdown(languages: dict[str, int]) -> str:
+    if not languages:
+        return "none"
+    parts = [f"{name}: {count}" for name, count in sorted(languages.items())]
+    return ", ".join(parts)
+
+
+def _print_code_summary(summary: dict) -> None:
+    table = Table(title="Code Summary")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Files", str(summary.get("file_count", 0)))
+    table.add_row("Lines of Code", str(summary.get("lines_of_code", 0)))
+    table.add_row("Symbols", str(summary.get("symbol_count", 0)))
+    table.add_row("Functions", str(summary.get("functions", 0)))
+    table.add_row("Classes", str(summary.get("classes", 0)))
+    table.add_row("Methods", str(summary.get("methods", 0)))
+    table.add_row("Constants", str(summary.get("constants", 0)))
+    table.add_row("Variables", str(summary.get("variables", 0)))
+    table.add_row("Routes", str(summary.get("routes", 0)))
+    table.add_row("Languages", _format_language_breakdown(summary.get("language_distribution", {})))
+    table.add_row("Skipped", str(summary.get("skipped", 0)))
+    table.add_row("Errors", str(summary.get("errored", 0)))
+    console.print(table)
+
+
+def _repo_root(repo: str) -> str | None:
+    for entry in query_repos():
+        if entry["name"] == repo:
+            return entry["root_path"]
+    return None
+
+
+def _print_search_roi(summary: dict) -> None:
+    console.print()
+    console.print("[bold]ROI[/bold]")
+    console.print(f"Lines searched: [cyan]{summary['lines_searched']}[/cyan]")
+    console.print(
+        f"Without SymDex: ~[red]{summary['estimated_tokens_without_symdex']}[/red] tokens"
+    )
+    console.print(
+        f"With SymDex: ~[green]{summary['estimated_tokens_with_symdex']}[/green] tokens"
+    )
+    console.print(f"Saved: ~[green]{summary['estimated_tokens_saved']}[/green] tokens")
+    console.print("[italic]You're in good hands.[/italic]")
+
+
+def _search_roi_summary(repo: str, rows: list[dict], result_kind: str) -> dict | None:
+    root = _repo_root(repo)
+    if not root or not rows:
+        return None
+    conn = get_connection(get_db_path(repo))
+    try:
+        return build_search_roi_summary_from_rows(
+            conn,
+            repo=repo,
+            rows=rows,
+            repo_root=root,
+            result_kind=result_kind,
+        )
+    finally:
+        conn.close()
+
+
 @app.command()
 def index(
     path: str = typer.Argument(..., help="Directory to index"),
-    name: str = typer.Option(None, "--name", "-n", help="Repo name (defaults to folder name)"),
+    repo: str = typer.Option(
+        None,
+        "--repo",
+        "--name",
+        "-r",
+        "-n",
+        help="Repo name (omit to auto-generate from git branch and path hash)",
+    ),
 ) -> None:
     """Index a folder and register it."""
     if not os.path.isdir(path):
         err_console.print(f"[red]Error:[/red] Path does not exist: {path}")
         raise typer.Exit(code=1)
-    result = _index_folder(path, name=name)
+    result = _index_folder(path, repo=repo)
     upsert_repo(result.repo, root_path=os.path.abspath(path), db_path=result.db_path)
     table = Table(title="Index Result")
     table.add_column("Repo", style="cyan")
@@ -49,6 +121,8 @@ def index(
     table.add_column("DB Path")
     table.add_row(result.repo, str(result.indexed_count), str(result.skipped_count), result.db_path)
     console.print(table)
+    console.print()
+    _print_code_summary(result.summary)
 
 
 @app.command()
@@ -73,7 +147,12 @@ def search(
         err_console.print(f"[red]Error:[/red] No symbols found matching: {query}")
         raise typer.Exit(code=1)
     if json_output:
-        typer.echo(json.dumps({"symbols": symbols}))
+        payload = {"symbols": symbols}
+        if repo:
+            roi = _search_roi_summary(repo, symbols, "symbol")
+            if roi is not None:
+                payload["roi"] = roi
+        typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Symbols matching '{query}'")
     table.add_column("Repo", style="blue")
@@ -84,6 +163,10 @@ def search(
     for s in symbols:
         table.add_row(s.get("repo", repo or ""), s["name"], s["kind"], s["file"], str(s["start_byte"]))
     console.print(table)
+    if repo:
+        roi = _search_roi_summary(repo, symbols, "symbol")
+        if roi is not None:
+            _print_search_roi(roi)
 
 
 @app.command()
@@ -105,7 +188,11 @@ def find(
         err_console.print(f"[red]Error:[/red] Symbol not found: {name}")
         raise typer.Exit(code=1)
     if json_output:
-        typer.echo(json.dumps({"symbols": symbols}))
+        payload = {"symbols": symbols}
+        roi = _search_roi_summary(repo, symbols, "symbol")
+        if roi is not None:
+            payload["roi"] = roi
+        typer.echo(json.dumps(payload))
         return
     s = symbols[0]
     table = Table(title=f"Symbol: {name}")
@@ -114,6 +201,9 @@ def find(
     for k, v in s.items():
         table.add_row(k, str(v) if v is not None else "")
     console.print(table)
+    roi = _search_roi_summary(repo, symbols, "symbol")
+    if roi is not None:
+        _print_search_roi(roi)
 
 
 @app.command()
@@ -169,7 +259,11 @@ def text(
         err_console.print(f"[red]Error:[/red] No matches found for: {query}")
         raise typer.Exit(code=1)
     if json_output:
-        typer.echo(json.dumps({"matches": matches}))
+        payload = {"matches": matches}
+        roi = _search_roi_summary(repo, matches, "text")
+        if roi is not None:
+            payload["roi"] = roi
+        typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Text matches for '{query}'")
     table.add_column("File")
@@ -178,6 +272,9 @@ def text(
     for m in matches:
         table.add_row(m["file"], str(m["line"]), m["text"])
     console.print(table)
+    roi = _search_roi_summary(repo, matches, "text")
+    if roi is not None:
+        _print_search_roi(roi)
 
 
 @app.command()
@@ -201,7 +298,11 @@ def semantic(
         err_console.print(f"[red]Error:[/red] No semantic matches found for: {query}")
         raise typer.Exit(code=1)
     if json_output:
-        typer.echo(json.dumps({"symbols": results}))
+        payload = {"symbols": results}
+        roi = _search_roi_summary(repo, results, "symbol")
+        if roi is not None:
+            payload["roi"] = roi
+        typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Semantic matches for '{query}'")
     table.add_column("Name", style="cyan")
@@ -211,6 +312,9 @@ def semantic(
     for s in results:
         table.add_row(s["name"], s["kind"], str(s["score"]), s["file"])
     console.print(table)
+    roi = _search_roi_summary(repo, results, "symbol")
+    if roi is not None:
+        _print_search_roi(roi)
 
 
 @app.command()
@@ -346,13 +450,20 @@ def serve(
 @app.command()
 def watch(
     path: str = typer.Argument(..., help="Path to the directory to watch."),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="Repo name (defaults to folder basename)."),
+    repo: Optional[str] = typer.Option(
+        None,
+        "--repo",
+        "--name",
+        "-r",
+        "-n",
+        help="Repo name (omit to auto-generate from git branch and path hash)",
+    ),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
 ) -> None:
     """Watch a directory and keep its index up to date automatically."""
     console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) — Ctrl+C to stop")
     try:
-        _watch_repo(path, name=name, interval=interval)
+        _watch_repo(path, repo=repo, interval=interval)
     except KeyboardInterrupt:
         console.print("\n[yellow]Watch stopped.[/yellow]")
 

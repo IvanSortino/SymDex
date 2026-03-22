@@ -10,6 +10,7 @@ import os
 import pytest
 from typer.testing import CliRunner
 from symdex.cli import app
+from symdex.core.naming import derive_repo_name
 
 runner = CliRunner()
 
@@ -60,7 +61,7 @@ def indexed_dir(tmp_path):
         '    pass\n'
     )
     # Index via CLI so the registry is populated
-    result = runner.invoke(app, ["index", str(src), "--name", "cov_repo"])
+    result = runner.invoke(app, ["index", str(src), "--repo", "cov_repo"])
     assert result.exit_code == 0, f"index failed: {result.output}"
     return {"path": str(src), "repo": "cov_repo"}
 
@@ -75,10 +76,12 @@ def test_index_bad_path_exits_1():
 
 def test_index_success_shows_stats(indexed_dir):
     # Already indexed in fixture; index again to confirm output
-    result = runner.invoke(app, ["index", indexed_dir["path"], "--name", "cov_repo"])
+    result = runner.invoke(app, ["index", indexed_dir["path"], "--repo", "cov_repo"])
     assert result.exit_code == 0
     # Table should contain the repo name
     assert "cov_repo" in result.output
+    assert "Lines of Code" in result.output
+    assert "Functions" in result.output
 
 
 # ── search command ─────────────────────────────────────────────────────────────
@@ -87,6 +90,8 @@ def test_search_found_table_output(indexed_dir):
     result = runner.invoke(app, ["search", "alpha", "--repo", indexed_dir["repo"]])
     assert result.exit_code == 0
     assert "alpha" in result.output.lower()
+    assert "Without SymDex" in result.output
+    assert "You're in good hands." in result.output
 
 
 def test_search_found_json_output(indexed_dir):
@@ -106,6 +111,25 @@ def test_search_across_repos_no_repo(indexed_dir):
     result = runner.invoke(app, ["search", "alpha"])
     # May succeed (finds in registered repo) or exit 1 if nothing found; either is valid
     assert result.exit_code in (0, 1)
+
+
+def test_index_auto_names_repo(tmp_path):
+    src = tmp_path / "autoindex"
+    src.mkdir()
+    (src / "module.py").write_text("def auto_name():\n    return 1\n")
+    expected = derive_repo_name(str(src))
+    result = runner.invoke(app, ["index", str(src)])
+    assert result.exit_code == 0
+    assert expected in result.output
+
+
+def test_index_name_alias_still_works(tmp_path):
+    src = tmp_path / "legacyindex"
+    src.mkdir()
+    (src / "module.py").write_text("def legacy_name():\n    return 1\n")
+    result = runner.invoke(app, ["index", str(src), "--name", "legacy_repo"])
+    assert result.exit_code == 0
+    assert "legacy_repo" in result.output
 
 
 # ── find command ──────────────────────────────────────────────────────────────
@@ -169,6 +193,8 @@ def test_text_found_table(indexed_dir):
     result = runner.invoke(app, ["text", "alpha", "--repo", indexed_dir["repo"]])
     assert result.exit_code == 0
     assert "alpha" in result.output.lower()
+    assert "Without SymDex" in result.output
+    assert "You're in good hands." in result.output
 
 
 def test_text_found_json(indexed_dir):

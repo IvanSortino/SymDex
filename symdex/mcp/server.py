@@ -35,8 +35,8 @@ mcp = FastMCP("symdex-mcp")
 
 
 @mcp.tool(name="index_folder", description="Index a local folder and return indexing statistics.")
-def index_folder(path: str, name: str | None = None) -> dict:
-    return index_folder_tool(path=path, name=name)
+def index_folder(path: str, repo: str | None = None, name: str | None = None) -> dict:
+    return index_folder_tool(path=path, repo=repo, name=name)
 
 
 @mcp.tool(name="search_symbols", description="Find functions/classes by name. ~200 tokens per lookup.")
@@ -56,7 +56,7 @@ def get_file_outline(repo: str, file: str) -> dict:
     return get_file_outline_tool(repo=repo, file=file)
 
 
-@mcp.tool(name="get_repo_outline", description="Directory tree and symbol stats for an indexed repo.")
+@mcp.tool(name="get_repo_outline", description="Directory tree and code summary for an indexed repo.")
 def get_repo_outline(repo: str) -> dict:
     return get_repo_outline_tool(repo=repo)
 
@@ -81,9 +81,9 @@ def get_symbols(names: list[str], repo: str | None = None) -> dict:
     return get_symbols_tool(names=names, repo=repo)
 
 
-@mcp.tool(name="index_repo", description="Index a named repo and register it in the central registry.")
-def index_repo(name: str, path: str) -> dict:
-    return index_repo_tool(name=name, path=path)
+@mcp.tool(name="index_repo", description="Index a repo and register it in the central registry.")
+def index_repo(path: str, repo: str | None = None, name: str | None = None) -> dict:
+    return index_repo_tool(path=path, repo=repo, name=name)
 
 
 @mcp.tool(name="invalidate_cache", description="Force re-index of a repo or specific file on next call.")
@@ -106,12 +106,12 @@ def gc_stale_indexes() -> dict:
     return gc_stale_indexes_tool()
 
 
-@mcp.tool(name="get_index_status", description="Get indexing status for a repo: symbol count, file count, last indexed time, staleness, and watcher status.")
+@mcp.tool(name="get_index_status", description="Get indexing status for a repo: symbol count, file count, Lines of Code, last indexed time, staleness, and watcher status.")
 def get_index_status(repo: str) -> dict:
     return get_index_status_tool(repo=repo)
 
 
-@mcp.tool(name="get_repo_stats", description="Get comprehensive statistics for a repo: symbol count, language distribution, top callers/callees, orphan files, and circular dependency count.")
+@mcp.tool(name="get_repo_stats", description="Get comprehensive statistics for a repo: Lines of Code, symbol count, language distribution, top callers/callees, orphan files, and circular dependency count.")
 def get_repo_stats(repo: str) -> dict:
     return get_repo_stats_tool(repo=repo)
 

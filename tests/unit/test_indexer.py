@@ -6,6 +6,7 @@ import os
 import pytest
 import subprocess
 from symdex.core.indexer import index_folder, invalidate, get_git_branch
+from symdex.core.naming import derive_repo_name
 
 
 PY_A = '''\
@@ -86,11 +87,11 @@ def test_node_modules_excluded(dir_with_node_modules):
 
 def test_index_folder_returns_repo_name(three_file_dir):
     result = index_folder(three_file_dir)
-    assert result.repo == os.path.basename(three_file_dir)
+    assert result.repo == derive_repo_name(three_file_dir)
 
 
 def test_index_folder_custom_name(three_file_dir):
-    result = index_folder(three_file_dir, name="myproject")
+    result = index_folder(three_file_dir, repo="myproject")
     assert result.repo == "myproject"
 
 
@@ -149,7 +150,7 @@ def test_index_folder_uses_git_branch_when_no_name(tmp_path):
     subprocess.run(["git", "symbolic-ref", "HEAD", "refs/heads/feature/worktree-test"], cwd=tmp_path, check=True, capture_output=True)
     (tmp_path / "hello.py").write_text("def hello(): pass\n")
     result = index_folder(str(tmp_path))
-    assert result.repo == "feature-worktree-test"
+    assert result.repo == derive_repo_name(str(tmp_path))
 
 
 def test_index_folder_falls_back_to_dirname_when_not_git(tmp_path):
@@ -157,4 +158,4 @@ def test_index_folder_falls_back_to_dirname_when_not_git(tmp_path):
     src.mkdir()
     (src / "hello.py").write_text("def hello(): pass\n")
     result = index_folder(str(src))
-    assert result.repo == "myproject"
+    assert result.repo == derive_repo_name(str(src))

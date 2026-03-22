@@ -103,9 +103,14 @@ def test_upsert_symbol_no_duplicate_on_reinsert(tmp_db):
 
 
 def test_upsert_file_and_retrieve_hash(tmp_db):
-    upsert_file(tmp_db, repo="myrepo", path="src/foo.py", file_hash="abc123")
+    upsert_file(tmp_db, repo="myrepo", path="src/foo.py", file_hash="abc123", line_count=12)
     retrieved = get_file_hash(tmp_db, repo="myrepo", path="src/foo.py")
     assert retrieved == "abc123"
+    row = tmp_db.execute(
+        "SELECT line_count FROM files WHERE repo=? AND path=?",
+        ("myrepo", "src/foo.py"),
+    ).fetchone()
+    assert row["line_count"] == 12
 
 
 def test_upsert_file_replaces_old_hash(tmp_db):

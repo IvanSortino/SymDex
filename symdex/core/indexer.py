@@ -10,12 +10,15 @@ import subprocess
 from dataclasses import dataclass
 from symdex.core.parser import parse_file
 from symdex.core.ignore import build_ignore_spec
+from symdex.core.naming import derive_repo_name
+from symdex.core.token_metrics import count_lines_of_code
 from symdex.graph.call_graph import extract_edges as _extract_edges
 from symdex.core.route_extractor import extract_routes as _extract_routes
 from symdex.core.storage import (
     get_connection,
     get_db_path,
     get_file_hash,
+    get_repo_summary,
     upsert_file,
     upsert_symbol,
     upsert_embedding,
@@ -76,6 +79,7 @@ class IndexResult:
     db_path: str
     indexed_count: int
     skipped_count: int
+    summary: dict
 
 
 def get_git_branch(path: str) -> str | None:
@@ -99,31 +103,34 @@ def get_git_branch(path: str) -> str | None:
         return None
 
 
-def _sha256(path: str) -> str:
-    h = hashlib.sha256()
+def _file_hash_and_loc(path: str) -> tuple[str, int]:
     with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        data = fh.read()
+    h = hashlib.sha256(data)
+    text = data.decode("utf-8", errors="ignore")
+    return h.hexdigest(), count_lines_of_code(text)
 
 
-def index_folder(path: str, name: str | None = None) -> IndexResult:
+def index_folder(path: str, repo: str | None = None, name: str | None = None) -> IndexResult:
     """Index all source files in path. Skips unchanged files via SHA256 hash.
 
     Args:
         path: Absolute path to the directory to index.
-        name: Repo name. Defaults to os.path.basename(path).
+        repo: Repo name override. When omitted, a stable repo name is derived
+            from the folder name, git branch (if available), and path hash.
+        name: Backward-compatible alias for repo.
 
     Returns:
         IndexResult with repo, db_path, indexed_count, skipped_count.
     """
     abs_path = os.path.abspath(path)
-    repo = (name or get_git_branch(abs_path) or os.path.basename(abs_path)).lower()
+    repo = derive_repo_name(abs_path, repo=repo, name=name)
     db_path = get_db_path(repo)
     conn = get_connection(db_path)
 
     indexed = 0
     skipped = 0
+    errored = 0
     ignore_spec = build_ignore_spec(abs_path)
 
     try:
@@ -143,9 +150,10 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
                     continue
 
                 try:
-                    current_hash = _sha256(abs_file)
+                    current_hash, line_count = _file_hash_and_loc(abs_file)
                 except OSError as exc:
                     logger.warning("Skipping %s: %s", abs_file, exc)
+                    errored += 1
                     continue
 
                 stored_hash = get_file_hash(conn, repo, rel_file)
@@ -201,13 +209,28 @@ def index_folder(path: str, name: str | None = None) -> IndexResult:
                             )
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("Route extraction failed for %s: %s", abs_file, exc)
-                upsert_file(conn, repo=repo, path=rel_file, file_hash=current_hash)
+                upsert_file(
+                    conn,
+                    repo=repo,
+                    path=rel_file,
+                    file_hash=current_hash,
+                    line_count=line_count,
+                )
                 indexed += 1
         conn.commit()
     finally:
         conn.close()
 
-    return IndexResult(repo=repo, db_path=db_path, indexed_count=indexed, skipped_count=skipped)
+    summary = get_repo_summary(repo, db_path)
+    summary["skipped"] = skipped
+    summary["errored"] = errored
+    return IndexResult(
+        repo=repo,
+        db_path=db_path,
+        indexed_count=indexed,
+        skipped_count=skipped,
+        summary=summary,
+    )
 
 
 def invalidate(repo: str, file: str | None = None) -> int:
