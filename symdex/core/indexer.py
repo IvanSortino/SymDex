@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+from typing import Callable, Optional
 from symdex.core.parser import parse_file
 from symdex.core.ignore import build_ignore_spec
 from symdex.core.naming import derive_repo_name
@@ -28,7 +29,12 @@ from symdex.core.storage import (
 
 logger = logging.getLogger(__name__)
 
-def _embed_symbols(conn, repo: str, file_path: str) -> None:
+def _embed_symbols(
+    conn,
+    repo: str,
+    file_path: str,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> None:
     """Compute and store embeddings for all symbols in repo+file.
 
     Queries symbols already inserted for this repo/file, computes an embedding
@@ -53,7 +59,7 @@ def _embed_symbols(conn, repo: str, file_path: str) -> None:
         docstring = row["docstring"] or ""
         embed_input = f"{signature}\n{docstring}\n{name}".strip()
         try:
-            vec = embed_for_index(embed_input)
+            vec = embed_for_index(embed_input, progress_callback=progress_callback)
             upsert_embedding(conn, symbol_id, vec)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Embedding failed for symbol %s (id=%s): %s", name, symbol_id, exc)
@@ -111,7 +117,12 @@ def _file_hash_and_loc(path: str) -> tuple[str, int]:
     return h.hexdigest(), count_lines_of_code(text)
 
 
-def index_folder(path: str, repo: str | None = None, name: str | None = None) -> IndexResult:
+def index_folder(
+    path: str,
+    repo: str | None = None,
+    name: str | None = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> IndexResult:
     """Index all source files in path. Skips unchanged files via SHA256 hash.
 
     Args:
@@ -177,7 +188,7 @@ def index_folder(path: str, repo: str | None = None, name: str | None = None) ->
                         signature=sym.get("signature"),
                         docstring=sym.get("docstring"),
                     )
-                _embed_symbols(conn, repo=repo, file_path=rel_file)
+                _embed_symbols(conn, repo=repo, file_path=rel_file, progress_callback=progress_callback)
                 sym_rows = conn.execute(
                     "SELECT id, name, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
                     (repo, rel_file),

@@ -2,6 +2,8 @@
 # License: See LICENSE file in the project root.
 
 import numpy as np
+import sys
+import types
 from unittest.mock import patch
 from symdex.search.semantic import embed_text, search_semantic, embed_for_index, embed_for_query
 from symdex.core.storage import get_connection, upsert_embedding
@@ -70,6 +72,24 @@ def test_get_model_lazy_loads():
     # Verify it's reused on second call (same object)
     model2 = _get_model()
     assert model is model2
+
+
+def test_get_model_reports_progress(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._model = None
+    calls: list[str] = []
+
+    class _FakeModel:
+        def encode(self, text, normalize_embeddings=True):
+            return FAKE_VEC
+
+    fake_module = types.SimpleNamespace(SentenceTransformer=lambda model_name: _FakeModel())
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
+
+    semantic_mod._get_model(progress_callback=calls.append)
+    assert calls[0].startswith("Loading embedding model:")
+    assert calls[-1] == "Embedding model ready."
 
 
 @patch("symdex.search.semantic._get_model")
