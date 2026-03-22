@@ -24,6 +24,14 @@ Use SymDex first for code exploration.
 - It does not read whole files when a symbol-level lookup is enough
 - It does not replace normal file reads when SymDex cannot cover a case
 
+## Examples
+
+- "Find the function that validates JWTs"
+- "What calls this route handler?"
+- "Show me the outline of this file"
+- "Search for the code that parses webhook payloads"
+- "Find the HTTP route for /api/checkout"
+
 ## Session Start
 
 1. Check whether the current worktree is indexed.
@@ -79,6 +87,14 @@ When you need to edit code:
 1. Use SymDex to find the exact symbol or file location.
 2. Read only that file or symbol slice.
 3. Make the smallest change needed.
+
+## Good Use Cases
+
+- Locating a symbol before editing
+- Tracing dependencies before refactoring
+- Exploring an unfamiliar repository
+- Finding the route that serves a request path
+- Checking whether the current index is fresh enough to trust
 
 ## Output Checklist
 
