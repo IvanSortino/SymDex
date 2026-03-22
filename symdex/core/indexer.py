@@ -78,6 +78,10 @@ _SKIP_EXTENSIONS = {
     ".lock",
 }
 
+_VOYAGE_ASSET_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".webp", ".bmp",
+}
+
 
 @dataclass
 class IndexResult:
@@ -117,6 +121,13 @@ def _file_hash_and_loc(path: str) -> tuple[str, int]:
     return h.hexdigest(), count_lines_of_code(text)
 
 
+def _voyage_multimodal_enabled() -> bool:
+    return (
+        os.environ.get("SYMDEX_EMBED_BACKEND", "local").strip().lower() == "voyage"
+        and os.environ.get("SYMDEX_VOYAGE_MULTIMODAL", "0").strip().lower() in {"1", "true", "yes", "on"}
+    )
+
+
 def index_folder(
     path: str,
     repo: str | None = None,
@@ -150,7 +161,7 @@ def index_folder(
 
             for filename in filenames:
                 ext = os.path.splitext(filename)[1].lower()
-                if ext in _SKIP_EXTENSIONS:
+                if ext in _SKIP_EXTENSIONS and not (_voyage_multimodal_enabled() and ext in _VOYAGE_ASSET_EXTENSIONS):
                     continue
 
                 abs_file = os.path.join(dirpath, filename)
@@ -172,54 +183,81 @@ def index_folder(
                     skipped += 1
                     continue
 
-                symbols = parse_file(abs_file, path)
                 conn.execute(
                     "DELETE FROM symbols WHERE repo=? AND file=?", (repo, rel_file)
                 )
-                for sym in symbols:
-                    upsert_symbol(
-                        conn,
-                        repo=repo,
-                        file=rel_file,
-                        name=sym["name"],
-                        kind=sym["kind"],
-                        start_byte=sym["start_byte"],
-                        end_byte=sym["end_byte"],
-                        signature=sym.get("signature"),
-                        docstring=sym.get("docstring"),
-                    )
-                _embed_symbols(conn, repo=repo, file_path=rel_file, progress_callback=progress_callback)
-                sym_rows = conn.execute(
-                    "SELECT id, name, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
-                    (repo, rel_file),
-                ).fetchall()
-                _extract_edges(conn, repo=repo, file_path=rel_file, abs_file=abs_file, symbols=[dict(r) for r in sym_rows])
-                # Route extraction for Python and JS/TS files
-                _ROUTE_LANG_MAP = {
-                    ".py": "python", ".js": "javascript", ".ts": "typescript",
-                    ".jsx": "javascript", ".tsx": "typescript",
-                    ".php": "php",
-                }
-                file_lang = _ROUTE_LANG_MAP.get(ext)
-                if file_lang:
+
+                if _voyage_multimodal_enabled() and ext in _VOYAGE_ASSET_EXTENSIONS:
+                    from symdex.search.semantic import embed_asset_for_index
+
+                    asset_name = rel_file
                     try:
-                        with open(abs_file, "rb") as rh:
-                            raw = rh.read()
-                        file_routes = _extract_routes(raw, rel_file, file_lang)
-                        delete_file_routes(conn, repo=repo, file=rel_file)
-                        for route in file_routes:
-                            upsert_route(
-                                conn,
-                                repo=repo,
-                                file=rel_file,
-                                method=route.method,
-                                path=route.path,
-                                handler=route.handler,
-                                start_byte=route.start_byte,
-                                end_byte=route.end_byte,
-                            )
+                        upsert_symbol(
+                            conn,
+                            repo=repo,
+                            file=rel_file,
+                            name=asset_name,
+                            kind="asset",
+                            start_byte=0,
+                            end_byte=0,
+                            signature=None,
+                            docstring=None,
+                        )
+                        vec = embed_asset_for_index(abs_file, progress_callback=progress_callback)
+                        asset_id = conn.execute(
+                            "SELECT id FROM symbols WHERE repo=? AND file=? AND name=?",
+                            (repo, rel_file, asset_name),
+                        ).fetchone()["id"]
+                        upsert_embedding(conn, asset_id, vec)
                     except Exception as exc:  # noqa: BLE001
-                        logger.warning("Route extraction failed for %s: %s", abs_file, exc)
+                        logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
+                        errored += 1
+                else:
+                    symbols = parse_file(abs_file, path)
+                    for sym in symbols:
+                        upsert_symbol(
+                            conn,
+                            repo=repo,
+                            file=rel_file,
+                            name=sym["name"],
+                            kind=sym["kind"],
+                            start_byte=sym["start_byte"],
+                            end_byte=sym["end_byte"],
+                            signature=sym.get("signature"),
+                            docstring=sym.get("docstring"),
+                        )
+                    _embed_symbols(conn, repo=repo, file_path=rel_file, progress_callback=progress_callback)
+                    sym_rows = conn.execute(
+                        "SELECT id, name, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
+                        (repo, rel_file),
+                    ).fetchall()
+                    _extract_edges(conn, repo=repo, file_path=rel_file, abs_file=abs_file, symbols=[dict(r) for r in sym_rows])
+                    # Route extraction for Python and JS/TS files
+                    _ROUTE_LANG_MAP = {
+                        ".py": "python", ".js": "javascript", ".ts": "typescript",
+                        ".jsx": "javascript", ".tsx": "typescript",
+                        ".php": "php",
+                    }
+                    file_lang = _ROUTE_LANG_MAP.get(ext)
+                    if file_lang:
+                        try:
+                            with open(abs_file, "rb") as rh:
+                                raw = rh.read()
+                            file_routes = _extract_routes(raw, rel_file, file_lang)
+                            delete_file_routes(conn, repo=repo, file=rel_file)
+                            for route in file_routes:
+                                upsert_route(
+                                    conn,
+                                    repo=repo,
+                                    file=rel_file,
+                                    method=route.method,
+                                    path=route.path,
+                                    handler=route.handler,
+                                    start_byte=route.start_byte,
+                                    end_byte=route.end_byte,
+                                )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning("Route extraction failed for %s: %s", abs_file, exc)
                 upsert_file(
                     conn,
                     repo=repo,

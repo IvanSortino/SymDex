@@ -439,7 +439,7 @@ User / AI Agent
 
 - **Storage:** SQLite + sqlite-vec. One `.db` file per repo. No external database.
 - **Parser:** tree-sitter. Fast, incremental, accurate — same parser as major editors.
-- **Embeddings:** sentence-transformers running locally. No API calls.
+- **Embeddings:** sentence-transformers by default, with optional Voyage AI support for users who want a hosted backend.
 - **Transport:** stdio (default) or HTTP. Same MCP interface either way.
 - **Change detection:** SHA-256 per file. Re-indexing only processes changed files.
 
@@ -452,7 +452,13 @@ User / AI Agent
 </p>
 
 **Does semantic search require an internet connection?**
-No. The embedding model downloads once on first use and runs fully offline after that. No API keys, no data leaves your machine.
+Not by default. Local embeddings download once on first use and run fully offline after that. If you opt into Voyage AI, SymDex sends embedding requests to the Voyage API, so that mode needs network access and an API key.
+
+**Can I use Voyage AI embeddings?**
+Yes. Set `SYMDEX_EMBED_BACKEND=voyage` and provide `VOYAGE_API_KEY`. For code/text search, the recommended model is `SYMDEX_VOYAGE_MODEL=voyage-code-3`.
+
+**Can Voyage index images, PDFs, and screenshots?**
+Yes, if you also enable `SYMDEX_VOYAGE_MULTIMODAL=1`. SymDex will index supported asset files as searchable asset entries. For that mode, install `voyageai`, `pillow`, and `pymupdf`, then use `SYMDEX_VOYAGE_MULTIMODAL_MODEL=voyage-multimodal-3.5`.
 
 **I see HuggingFace warnings in Roo / KiloCode on first use. Is that normal?**
 Not anymore. v0.1.7 suppresses all HuggingFace Hub noise at startup (progress bars, token warnings, login advisories). If you are on an older version, upgrade (`uv tool upgrade symdex` or `pip install --upgrade symdex`).
@@ -486,6 +492,45 @@ No. The MCP server starts on demand when your agent calls it. For auto-watch, `s
 
 **Can I use the CLI without an AI agent?**
 Yes — every capability is available via CLI. SymDex is useful as a developer tool independent of any AI agent: `symdex find`, `symdex semantic`, `symdex callers`, `symdex routes` all work from the terminal.
+
+## Voyage AI backend
+
+SymDex defaults to local `sentence-transformers`. If you want a hosted backend, Voyage AI is optional and explicit.
+
+### Text embeddings
+
+```bash
+SYMDEX_EMBED_BACKEND=voyage VOYAGE_API_KEY=... symdex index . --repo myrepo
+SYMDEX_EMBED_BACKEND=voyage VOYAGE_API_KEY=... symdex semantic "parse source code" --repo myrepo
+```
+
+Recommended text model:
+- `SYMDEX_VOYAGE_MODEL=voyage-code-3`
+
+### Multimodal assets
+
+If you also want images, screenshots, and PDFs to be searchable, enable multimodal mode:
+
+```bash
+SYMDEX_EMBED_BACKEND=voyage
+SYMDEX_VOYAGE_MULTIMODAL=1
+VOYAGE_API_KEY=...
+symdex index . --repo myrepo
+```
+
+Recommended multimodal model:
+- `SYMDEX_VOYAGE_MULTIMODAL_MODEL=voyage-multimodal-3.5`
+
+Requirements for multimodal mode:
+- `voyageai`
+- `pillow`
+- `pymupdf`
+
+Notes:
+- Voyage is optional. If you do not set `SYMDEX_EMBED_BACKEND=voyage`, SymDex keeps using local embeddings.
+- Asset files are indexed as searchable asset entries when multimodal mode is on.
+- PDFs are converted to a rendered page image before embedding.
+- If you only want code/text search, you do not need to enable multimodal mode.
 
 ---
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import Callable, Optional
+from pathlib import Path
+from typing import Any, Callable, Optional
 
 # Suppress HuggingFace Hub noise at import time
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -26,11 +27,16 @@ except Exception:  # noqa: BLE001
     pass
 
 _model = None
+_voyage_client = None
 
 
 def _notify(progress_callback: Optional[Callable[[str], None]], message: str) -> None:
     if progress_callback is not None:
         progress_callback(message)
+
+
+def _backend() -> str:
+    return os.environ.get("SYMDEX_EMBED_BACKEND", "local").strip().lower()
 
 
 def _get_model(progress_callback: Optional[Callable[[str], None]] = None):
@@ -44,11 +50,128 @@ def _get_model(progress_callback: Optional[Callable[[str], None]] = None):
     return _model
 
 
+def _get_voyage_client(progress_callback: Optional[Callable[[str], None]] = None):
+    global _voyage_client
+    if _voyage_client is None:
+        _notify(progress_callback, "Loading Voyage API client.")
+        try:
+            import voyageai
+        except ImportError as exc:  # pragma: no cover - depends on user install
+            raise RuntimeError(
+                "Voyage backend selected, but the optional 'voyageai' package is not installed."
+            ) from exc
+
+        api_key = os.environ.get("VOYAGE_API_KEY")
+        _voyage_client = voyageai.Client(api_key=api_key) if api_key else voyageai.Client()
+        _notify(progress_callback, "Voyage API client ready.")
+    return _voyage_client
+
+
+def _voyage_text_model() -> str:
+    return os.environ.get("SYMDEX_VOYAGE_MODEL", "voyage-code-3")
+
+
+def _voyage_multimodal_model() -> str:
+    return os.environ.get("SYMDEX_VOYAGE_MULTIMODAL_MODEL", "voyage-multimodal-3.5")
+
+
+def _voyage_multimodal_enabled() -> bool:
+    return os.environ.get("SYMDEX_VOYAGE_MULTIMODAL", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _extract_embedding(result: Any) -> np.ndarray:
+    embeddings = getattr(result, "embeddings", None)
+    if embeddings is None:
+        raise RuntimeError("Voyage response did not include embeddings.")
+    if not embeddings:
+        raise RuntimeError("Voyage response returned no embeddings.")
+    return np.array(embeddings[0], dtype="float32")
+
+
+def _embed_voyage_text(
+    text: str,
+    input_type: str,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> np.ndarray:
+    client = _get_voyage_client(progress_callback=progress_callback)
+    model = _voyage_text_model()
+    _notify(progress_callback, f"Embedding with Voyage model: {model}")
+    result = client.embed(
+        texts=[text],
+        model=model,
+        input_type=input_type,
+        truncation=True,
+    )
+    _notify(progress_callback, "Voyage embedding ready.")
+    return _extract_embedding(result)
+
+
+def _load_multimodal_input(path: str):
+    suffix = Path(path).suffix.lower()
+    image_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".svg"}
+
+    if suffix in image_suffixes:
+        from PIL import Image
+
+        image = Image.open(path)
+        try:
+            return image.copy() if hasattr(image, "copy") else image
+        finally:
+            close = getattr(image, "close", None)
+            if callable(close):
+                close()
+
+    if suffix == ".pdf":
+        try:
+            import fitz  # type: ignore
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "PDF multimodal indexing requires the optional 'pymupdf' package."
+            ) from exc
+
+        from PIL import Image
+
+        with fitz.open(path) as doc:
+            if doc.page_count == 0:
+                raise RuntimeError("Cannot embed an empty PDF.")
+            page = doc.load_page(0)
+            pix = page.get_pixmap(alpha=False)
+            return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+    raise RuntimeError(f"Voyage multimodal indexing does not support '{suffix}' files.")
+
+
+def embed_asset_for_index(
+    path: str,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> np.ndarray:
+    """Return a Voyage multimodal embedding for a supported asset file."""
+    if _backend() != "voyage":
+        raise RuntimeError("Asset embeddings are only available with the Voyage backend.")
+    if not _voyage_multimodal_enabled():
+        raise RuntimeError("Voyage multimodal mode is disabled.")
+
+    client = _get_voyage_client(progress_callback=progress_callback)
+    model = _voyage_multimodal_model()
+    _notify(progress_callback, f"Embedding asset with Voyage multimodal model: {model}")
+    image = _load_multimodal_input(path)
+    result = client.multimodal_embed(
+        inputs=[[image]],
+        model=model,
+        input_type="document",
+        truncation=True,
+    )
+    _notify(progress_callback, "Voyage multimodal embedding ready.")
+    return _extract_embedding(result)
+
+
 def embed_text(text: str, progress_callback: Optional[Callable[[str], None]] = None) -> np.ndarray:
     """Return float32 embedding vector for text."""
-    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local")
+    backend = _backend()
     if backend == "claude":
         return _embed_claude(text)
+    if backend == "voyage":
+        return _embed_voyage_text(text, input_type="document", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
     vec = model.encode(text, normalize_embeddings=True)
     return vec.astype("float32")
@@ -62,9 +185,11 @@ def embed_for_index(
 
     Asymmetric models expect the 'search_document: ' prefix for indexed text.
     """
-    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local")
+    backend = _backend()
     if backend == "claude":
         return _embed_claude(f"search_document: {text}")
+    if backend == "voyage":
+        return _embed_voyage_text(text, input_type="document", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
     vec = model.encode(f"search_document: {text}", normalize_embeddings=True)
     return vec.astype("float32")
@@ -78,9 +203,11 @@ def embed_for_query(
 
     Asymmetric models expect the 'search_query: ' prefix for query text.
     """
-    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local")
+    backend = _backend()
     if backend == "claude":
         return _embed_claude(f"search_query: {text}")
+    if backend == "voyage":
+        return _embed_voyage_text(text, input_type="query", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
     vec = model.encode(f"search_query: {text}", normalize_embeddings=True)
     return vec.astype("float32")
