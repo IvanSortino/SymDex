@@ -173,6 +173,22 @@ HTTP mode:
 
 ---
 
+## Where SymDex Fits
+
+The old README used a named-tool matrix. I removed it during the cleanup because those claims go stale quickly and are hard to keep precise. This smaller section keeps the positioning signal without overcommitting on other tools' current feature sets.
+
+| Approach | Strong at | Tradeoff | Where SymDex differs |
+|---|---|---|---|
+| Editor-bound LSPs | type-aware navigation and refactors inside the editor | tied to an editor session and weak on intent search | pre-indexed, terminal-first, semantic, and route-aware |
+| LSP wrappers for agents | deeper language-server-backed analysis | heavier per-language setup and live-file coupling | one SQLite index per repo and the same interface across repos |
+| Graph-backed code indexers | graph-style architecture queries | extra backend/storage complexity | zero-infra local storage with SQLite |
+| Docker-heavy hybrid search stacks | chunked semantic search with external services | more moving parts at install and runtime | local-first workflow with simple CLI and MCP setup |
+| SymDex | fast repo-local symbol, text, semantic, route, and call-graph retrieval | not a full type checker or automated refactoring engine | optimized for precise retrieval and agent efficiency |
+
+If you need full type-system reasoning or editor-native refactors, a language server still goes deeper. If you need pre-indexed retrieval, repo-local portability, and an MCP-friendly search layer, SymDex is the better fit.
+
+---
+
 ## CLI reference
 
 ```bash
