@@ -8,6 +8,7 @@
 import json
 import os
 import pytest
+import sys
 from typer.testing import CliRunner
 from symdex.cli import app
 from symdex.core.naming import derive_repo_name
@@ -264,3 +265,13 @@ def test_callees_not_found_exits_1(indexed_dir):
 def test_semantic_no_repo_exits_1():
     result = runner.invoke(app, ["semantic", "some query"])
     assert result.exit_code == 1
+
+
+def test_semantic_missing_local_extra_exits_1(indexed_dir, monkeypatch):
+    monkeypatch.delenv("SYMDEX_EMBED_BACKEND", raising=False)
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+
+    result = runner.invoke(app, ["semantic", "some query", "--repo", indexed_dir["repo"]])
+
+    assert result.exit_code == 1
+    assert 'symdex[local]' in result.output

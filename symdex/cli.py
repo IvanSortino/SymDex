@@ -8,6 +8,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
@@ -292,13 +293,17 @@ def semantic(
         raise typer.Exit(code=1)
     conn = get_connection(get_db_path(repo))
     try:
-        results = _search_semantic(
-            conn,
-            query=query,
-            repo=repo,
-            limit=limit,
-            progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"),
-        )
+        try:
+            results = _search_semantic(
+                conn,
+                query=query,
+                repo=repo,
+                limit=limit,
+                progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+            )
+        except Exception as exc:
+            err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=1)
     finally:
         conn.close()
     if not results:

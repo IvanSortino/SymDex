@@ -39,10 +39,26 @@ def _backend() -> str:
     return os.environ.get("SYMDEX_EMBED_BACKEND", "local").strip().lower()
 
 
+def _missing_extra_message(feature: str, extra: str, package: str) -> str:
+    return (
+        f"{feature} requires the optional '{package}' package. "
+        f"Install it with `pip install \"symdex[{extra}]\"`."
+    )
+
+
 def _get_model(progress_callback: Optional[Callable[[str], None]] = None):
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:  # pragma: no cover - depends on user install
+            raise RuntimeError(
+                _missing_extra_message(
+                    "The local semantic backend",
+                    "local",
+                    "sentence-transformers",
+                )
+            ) from exc
         model_name = os.environ.get("SYMDEX_EMBED_MODEL", "all-MiniLM-L6-v2")
         _notify(progress_callback, f"Loading embedding model: {model_name}")
         _model = SentenceTransformer(model_name)
@@ -58,7 +74,11 @@ def _get_voyage_client(progress_callback: Optional[Callable[[str], None]] = None
             import voyageai
         except ImportError as exc:  # pragma: no cover - depends on user install
             raise RuntimeError(
-                "Voyage backend selected, but the optional 'voyageai' package is not installed."
+                _missing_extra_message(
+                    "The Voyage backend",
+                    "voyage",
+                    "voyageai",
+                )
             ) from exc
 
         api_key = os.environ.get("VOYAGE_API_KEY")
@@ -111,7 +131,16 @@ def _load_multimodal_input(path: str):
     image_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".svg"}
 
     if suffix in image_suffixes:
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError as exc:  # pragma: no cover - depends on user install
+            raise RuntimeError(
+                _missing_extra_message(
+                    "Voyage multimodal indexing for image assets",
+                    "voyage-multimodal",
+                    "pillow",
+                )
+            ) from exc
 
         image = Image.open(path)
         try:
@@ -126,10 +155,23 @@ def _load_multimodal_input(path: str):
             import fitz  # type: ignore
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise RuntimeError(
-                "PDF multimodal indexing requires the optional 'pymupdf' package."
+                _missing_extra_message(
+                    "Voyage multimodal indexing for PDFs",
+                    "voyage-multimodal",
+                    "pymupdf",
+                )
             ) from exc
 
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError as exc:  # pragma: no cover - depends on user install
+            raise RuntimeError(
+                _missing_extra_message(
+                    "Voyage multimodal indexing for PDFs",
+                    "voyage-multimodal",
+                    "pillow",
+                )
+            ) from exc
 
         with fitz.open(path) as doc:
             if doc.page_count == 0:
