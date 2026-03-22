@@ -445,6 +445,48 @@ User / AI Agent
 
 ---
 
+## Voyage AI embeddings
+
+SymDex defaults to local `sentence-transformers`. Voyage AI is an optional hosted backend for people who want to offload embedding work to the cloud.
+
+### When to use it
+
+- Use Voyage text embeddings if you want a hosted alternative to local embeddings.
+- Use Voyage multimodal mode if you also want images, screenshots, and PDFs to be searchable.
+- Keep the default local backend if you want fully offline indexing and search.
+
+### Text mode
+
+```bash
+SYMDEX_EMBED_BACKEND=voyage VOYAGE_API_KEY=... symdex index . --repo myrepo
+SYMDEX_EMBED_BACKEND=voyage VOYAGE_API_KEY=... symdex semantic "parse source code" --repo myrepo
+```
+
+Recommended model:
+- `SYMDEX_VOYAGE_MODEL=voyage-code-3`
+
+### Multimodal mode
+
+```bash
+SYMDEX_EMBED_BACKEND=voyage
+SYMDEX_VOYAGE_MULTIMODAL=1
+VOYAGE_API_KEY=...
+symdex index . --repo myrepo
+```
+
+Recommended multimodal model:
+- `SYMDEX_VOYAGE_MULTIMODAL_MODEL=voyage-multimodal-3.5`
+
+Requirements:
+- `voyageai`
+- `pillow`
+- `pymupdf`
+
+Notes:
+- Voyage is opt-in. If you do not set `SYMDEX_EMBED_BACKEND=voyage`, SymDex keeps using local embeddings.
+- Asset files are indexed as searchable asset entries when multimodal mode is on.
+- PDFs are converted to a rendered page image before embedding.
+
 ## FAQ
 
 <p align="center">
