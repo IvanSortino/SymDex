@@ -469,6 +469,11 @@ def get_index_status(repo: str, db_path: str) -> dict:
             "SELECT COUNT(DISTINCT path) FROM files WHERE repo=?", (repo,)
         ).fetchone()[0]
 
+        lines_of_code = conn.execute(
+            "SELECT COALESCE(SUM(line_count), 0) FROM files WHERE repo=?",
+            (repo,),
+        ).fetchone()[0]
+
         # Get last_indexed timestamp
         row = conn.execute(
             "SELECT MAX(indexed_at) FROM files WHERE repo=?", (repo,)
@@ -541,11 +546,6 @@ def get_index_status(repo: str, db_path: str) -> dict:
 
     finally:
         conn.close()
-
-    lines_of_code = conn.execute(
-        "SELECT COALESCE(SUM(line_count), 0) FROM files WHERE repo=?",
-        (repo,),
-    ).fetchone()[0]
 
     return {
         "repo": repo,

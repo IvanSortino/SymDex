@@ -23,6 +23,9 @@ from symdex.mcp.tools import (
     get_symbols_tool,
     index_repo_tool,
     invalidate_cache_tool,
+    semantic_search_tool,
+    get_callers_tool,
+    get_callees_tool,
     gc_stale_indexes_tool,
     search_routes_tool,
     get_index_status_tool,
@@ -89,6 +92,21 @@ def index_repo(path: str, repo: str | None = None, name: str | None = None) -> d
 @mcp.tool(name="invalidate_cache", description="Force re-index of a repo or specific file on next call.")
 def invalidate_cache(repo: str, file: str | None = None) -> dict:
     return invalidate_cache_tool(repo=repo, file=file)
+
+
+@mcp.tool(name="semantic_search", description="Find symbols by meaning using embedding similarity.")
+def semantic_search(query: str, repo: str | None = None, limit: int = 10) -> dict:
+    return semantic_search_tool(query=query, repo=repo, limit=limit)
+
+
+@mcp.tool(name="get_callers", description="Return all symbols that call the named function.")
+def get_callers(name: str, repo: str) -> dict:
+    return get_callers_tool(name=name, repo=repo)
+
+
+@mcp.tool(name="get_callees", description="Return all symbols called by the named function.")
+def get_callees(name: str, repo: str) -> dict:
+    return get_callees_tool(name=name, repo=repo)
 
 
 @mcp.tool(name="search_routes", description="Find HTTP routes indexed from a repo. Filter by method or path substring.")
