@@ -26,6 +26,7 @@ from symdex.core.storage import (
 )
 from symdex.core.token_metrics import build_search_roi_summary_from_rows
 from symdex.search.symbol_search import search_symbols as _search_symbols
+from symdex.search.semantic import search_semantic as _search_semantic
 
 app = typer.Typer(name="symdex", help="SymDex — universal code indexer")
 console = Console()
@@ -112,7 +113,7 @@ def index(
     if not os.path.isdir(path):
         err_console.print(f"[red]Error:[/red] Path does not exist: {path}")
         raise typer.Exit(code=1)
-    result = _index_folder(path, repo=repo)
+    result = _index_folder(path, repo=repo, progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"))
     upsert_repo(result.repo, root_path=os.path.abspath(path), db_path=result.db_path)
     table = Table(title="Index Result")
     table.add_column("Repo", style="cyan")
@@ -291,7 +292,13 @@ def semantic(
         raise typer.Exit(code=1)
     conn = get_connection(get_db_path(repo))
     try:
-        results = search_semantic(conn, query=query, repo=repo, limit=limit)
+        results = _search_semantic(
+            conn,
+            query=query,
+            repo=repo,
+            limit=limit,
+            progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+        )
     finally:
         conn.close()
     if not results:

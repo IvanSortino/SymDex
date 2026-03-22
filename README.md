@@ -45,7 +45,7 @@ uvx symdex --help
 
 ---
 
-> **What's new in v0.1.8** — SQLite extension loading is now optional (fixes Python builds without `enable_load_extension`), install docs now show pip and uv/uvx equally, and CI now includes a regression test for the sqlite-extension fallback path. [See full changelog →](#changelog)
+> **Current branch updates** — repo names now auto-derive from git branch plus a short path hash when `--repo` is omitted, `--repo` is the canonical flag everywhere, and successful searches print approximate token savings. [See full changelog →](#changelog)
 
 ---
 
@@ -80,15 +80,18 @@ pip install symdex
 # OR
 uvx symdex --help
 
-# Index your project (run once; only changed files re-process on subsequent runs)
-symdex index ./myproject --name myproject
+# Index your project (run once; prints a summary with files, Lines of Code, symbols, and languages)
+symdex index ./myproject --repo myproject
 # OR
-uvx symdex index ./myproject --name myproject
+uvx symdex index ./myproject --repo myproject
 
 # Search by name
 symdex search "validate_email" --repo myproject
 # OR
 uvx symdex search "validate_email" --repo myproject
+
+# After a successful search, SymDex prints an approximate token-savings footer
+# "Without SymDex", "With SymDex", and a playful "You're in good hands."
 
 # Search by meaning (no name required)
 symdex semantic "check email format" --repo myproject
@@ -136,6 +139,8 @@ With SymDex:
 - total per lookup task     ~250 tokens
 ```
 
+After each successful index, SymDex should also print a readable summary: files indexed, Lines of Code, symbol counts, skipped files, and language breakdown. That gives you an immediate picture of the codebase without opening a file.
+
 ---
 
 
@@ -153,7 +158,7 @@ With SymDex:
 | **Call graph** | Callers, callees, circular dependency visibility |
 | **HTTP routes** | Extract and query API routes without opening files |
 | **File outline** | All symbols in one file without full file transfer |
-| **Repo overview** | Structure and symbol-level repository stats |
+| **Repo overview** | Structure and code summary |
 | **Auto-watch** | Reindex on change; remove deleted files from index |
 | **Cross-repo registry** | Search and manage multiple projects from one tool |
 | **Stale index GC** | Clean orphaned index DBs after branch/worktree cleanup |
@@ -242,12 +247,12 @@ SocratiCode does hybrid search and Mermaid graph visualization. Worth knowing ab
 | Tool | Description |
 |------|-------------|
 | `index_folder` | Index a local folder |
-| `index_repo` | Index a named registered repo |
+| `index_repo` | Index a registered repo |
 | `search_symbols` | Find function or class by name — returns byte offsets |
 | `get_symbol` | Retrieve one symbol's source by byte offset |
 | `get_symbols` | Bulk symbol retrieval |
 | `get_file_outline` | All symbols in a file — no file content transferred |
-| `get_repo_outline` | Directory structure and symbol statistics |
+| `get_repo_outline` | Directory structure and code summary |
 | `get_file_tree` | Directory tree — structure only |
 | `search_text` | Text or regex search — matching lines only |
 | `list_repos` | List all indexed repos |
@@ -257,8 +262,8 @@ SocratiCode does hybrid search and Mermaid graph visualization. Worth knowing ab
 | `get_callees` | All functions a named function calls |
 | `search_routes` | HTTP routes from a repo (Flask/FastAPI/Django/Express) |
 | `gc_stale_indexes` | Remove databases for repos no longer on disk |
-| `get_index_status` | Index freshness, file count, watcher state |
-| `get_repo_stats` | Architecture metrics: fan-in, fan-out, orphans, language distribution |
+| `get_index_status` | Index freshness, file count, Lines of Code, watcher state |
+| `get_repo_stats` | Code metrics: Lines of Code, fan-in, fan-out, orphans, language distribution |
 | `get_graph_diagram` | Mermaid call graph — renders in Claude, GitHub, Cursor |
 | `find_circular_deps` | Detect circular import/call chains |
 
@@ -268,8 +273,8 @@ SocratiCode does hybrid search and Mermaid graph visualization. Worth knowing ab
 
 ```bash
 # Indexing
-symdex index ./myproject                            # Index a folder (auto-names from git branch)
-symdex index ./myproject --name myproj             # Index with explicit name
+symdex index ./myproject                            # Index a folder (auto-names from git branch + path hash)
+symdex index ./myproject --repo myproj             # Index with explicit name
 symdex invalidate --repo myproj                    # Force re-index a repo
 symdex invalidate --repo myproj --file auth.py     # Force re-index one file
 symdex gc                                           # Remove stale indexes
@@ -302,6 +307,7 @@ symdex serve --port 8080                           # HTTP
 
 # Monitoring
 symdex watch ./myproject                           # Auto-reindex on file changes
+# Omit --repo to auto-name from git branch + path hash; use --repo to override
 ```
 
 ---
@@ -473,7 +479,7 @@ Yes. `get_graph_diagram` returns a Mermaid diagram that renders in Claude, GitHu
 `find_circular_deps` runs a DFS over the call graph built during indexing. It returns up to 20 distinct cycles, each shown as a path from the first file back to itself.
 
 **Is there a size limit?**
-No hard limit. SymDex has been tested on codebases with 500+ files. For very large monorepos, index sub-directories by area (e.g. `symdex index ./src/auth --name auth`) to keep individual databases small and fast.
+No hard limit. SymDex has been tested on codebases with 500+ files. For very large monorepos, index sub-directories by area (e.g. `symdex index ./src/auth --repo auth`) to keep individual databases small and fast.
 
 **Do I need to keep SymDex running?**
 No. The MCP server starts on demand when your agent calls it. For auto-watch, `symdex watch` runs as a background process you start once.
@@ -485,7 +491,12 @@ Yes — every capability is available via CLI. SymDex is useful as a developer t
 
 ## Changelog
 
-### v0.1.8 — current
+### v0.1.9 — current branch
+- **Repo auto-naming** — `symdex index .` and `symdex watch .` now derive a unique repo id from git branch + path hash when `--repo` is omitted.
+- **Canonical repo flag** — `--repo` is the preferred name override on CLI and MCP; `--name` remains as a compatibility alias.
+- **Search ROI footer** — successful search commands print approximate token savings using the default tokenizer profile.
+
+### v0.1.8
 - **SQLite compatibility fix** — SymDex no longer crashes on Python builds where `sqlite3.Connection.enable_load_extension` is unavailable. Extension loading is now best-effort and safely skipped when unsupported.
 - **Regression test added** — `test_get_connection_works_without_enable_load_extension` protects this compatibility path.
 - **CI guard added** — new workflow runs the sqlite-extension regression test on PRs and pushes to prevent reintroducing the crash.
@@ -494,15 +505,16 @@ Yes — every capability is available via CLI. SymDex is useful as a developer t
 ### v0.1.7
 - **`get_graph_diagram`** — generates a Mermaid call graph from the index. Renders in Claude, GitHub, Cursor, any Markdown viewer. Language-coloured nodes, cycle edges highlighted in red, `focus_file` + `depth` for subgraph zoom.
 - **`find_circular_deps`** — DFS over the call graph. Returns up to 20 distinct circular import/call chains.
-- **`get_repo_stats`** — architecture overview: fan-in, fan-out, orphan files, language distribution, edge count, circular dep count.
-- **`get_index_status`** — index freshness check: symbol count, file count, last indexed time, staleness flag, watcher state.
+- **`get_repo_stats`** — code summary: Lines of Code, fan-in, fan-out, orphan files, language distribution, edge count, circular dep count.
+- **`get_index_status`** — index freshness check: symbol count, file count, Lines of Code, last indexed time, staleness flag, watcher state.
+- **Search ROI footer** — successful search commands print approximate token savings using the default tokenizer profile.
 - **`.symdexignore`** — per-project ignore file (gitignore format). Built-in defaults always applied: `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/`, `*.min.js`, and more.
 - **HF Hub noise fix** — no more HuggingFace progress bars or warnings in Roo, KiloCode, or any MCP client on first `semantic_search` call.
 - **Asymmetric embedding prefixes** — `search_document:` at index time, `search_query:` at query time. Improves semantic recall with MiniLM and nomic-embed-text models.
 - **tree-sitter compatibility fix** — newer tree-sitter versions and TypeScript grammar loading now work correctly (community contribution).
 
 ### v0.1.5
-- **Git worktree support** — `symdex index .` inside any git repo auto-names from the current branch (`feature/auth` → `feature-auth`). No `--name` flag needed.
+- **Git worktree support** — `symdex index .` inside any git repo auto-names from the current branch plus a short path hash. No `--repo` flag needed.
 - **`symdex gc`** — scans the registry, removes `.db` files for repos whose root directories no longer exist on disk. One command cleans up after deleted branches and worktrees.
 - **`gc_stale_indexes` MCP tool** — same cleanup available to agents mid-session.
 - **Bug fix** — `schema.sql` was missing from the PyPI wheel. Incremental re-index now works correctly after install.
