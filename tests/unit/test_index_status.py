@@ -82,6 +82,7 @@ def test_get_index_status_returns_fields():
         assert "repo" in resp
         assert "symbol_count" in resp
         assert "file_count" in resp
+        assert "lines_of_code" in resp
         assert "last_indexed" in resp
         assert "age_seconds" in resp
         assert "stale" in resp
@@ -93,6 +94,8 @@ def test_get_index_status_returns_fields():
         assert resp["symbol_count"] > 0  # We indexed a function and a class
         assert isinstance(resp["file_count"], int)
         assert resp["file_count"] > 0  # At least one file
+        assert isinstance(resp["lines_of_code"], int)
+        assert resp["lines_of_code"] > 0
         assert isinstance(resp["last_indexed"], str)
         assert isinstance(resp["age_seconds"], (int, float))
         assert resp["age_seconds"] >= 0
