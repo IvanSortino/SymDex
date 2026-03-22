@@ -50,7 +50,7 @@ uvx symdex --help
 Install the SymDex code-search skill to make agents use SymDex first for code exploration:
 
 ```bash
-npx skills add husnainpk/SymDex --skill symdex-code-search
+npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search
 ```
 
 What it does:
@@ -59,7 +59,9 @@ What it does:
 - Searches by symbol, intent, routes, callers, and callees
 - Reads only the exact symbol or file slice needed
 
-The skill lives in this repo at `skills/symdex-code-search/SKILL.md`.
+The skill lives in this repo at `skills/symdex-code-search/SKILL.md` and follows the standard `skills/<name>/SKILL.md` layout used by the open skills ecosystem.
+
+Installing through the `skills` CLI is also the path that feeds skills.sh discovery telemetry.
 
 ---
 

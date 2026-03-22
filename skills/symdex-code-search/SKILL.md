@@ -1,68 +1,65 @@
-﻿---
+---
 name: symdex-code-search
 description: |
-  Guide for using SymDex as the primary code-exploration layer in an indexed repository.
-  Use when locating symbols, exploring unfamiliar code, tracing callers or callees,
-  searching HTTP routes, checking index freshness, or replacing Read/Grep/Glob during
-  code exploration.
+  This skill should be used when finding, tracing, or understanding code in a repository
+  with SymDex available. Trigger it for requests like "where is this defined?", "who
+  calls this?", "what route handles this path?", "show me the file outline", "search
+  this codebase by intent", or any task that would otherwise rely on broad Read/Grep/Glob
+  exploration.
 ---
 
 # SymDex Code Search
 
-Use SymDex first for code exploration.
+Use SymDex before broad file browsing.
 
-## What This Skill Does
+## Start Here
 
-- Replaces broad file browsing with SymDex-backed discovery
-- Uses symbol search, semantic search, route search, and call graphs
-- Keeps reads small by jumping to the exact symbol or file slice
-- Verifies index freshness before searching
+1. Confirm the repo id.
+2. If the repo id is already known, pass `repo` on every scoped tool call.
+3. If the repo id is unknown, call `list_repos` and match the current worktree.
+4. Check freshness with `get_index_status(repo)`.
+5. If the current worktree is not indexed, call `index_folder(path=".")`.
+6. Reuse the returned `repo` id for the rest of the task.
 
-## What This Skill Does Not Do
+If SymDex is unavailable or indexing fails, say so clearly and fall back to normal file reads only as needed.
 
-- It does not invent repo naming files or commit helper config
-- It does not read whole files when a symbol-level lookup is enough
-- It does not replace normal file reads when SymDex cannot cover a case
+## Core Rules
 
-## Examples
+- Search first.
+- Pass `repo` whenever you know it.
+- Prefer `get_symbol` or `get_file_outline` over full-file reads.
+- Use call graph and route tools before manual tracing.
+- Re-check `get_index_status` after major edits or worktree switches.
+- Read full files only when editing, reviewing unsupported or generated content, or when SymDex cannot answer.
 
-- "Find the function that validates JWTs"
-- "What calls this route handler?"
-- "Show me the outline of this file"
-- "Search for the code that parses webhook payloads"
-- "Find the HTTP route for /api/checkout"
-
-## Session Start
-
-1. Check whether the current worktree is indexed.
-2. If you already know the repo id, use `get_index_status(repo=...)`.
-3. If not indexed, run `symdex index .` from the current worktree and let SymDex derive the repo name automatically.
-4. After indexing, reuse the returned repo id for the rest of the session.
-5. If you switch worktrees, check status again before searching.
-
-## Tool Choice
+## Tool Selection
 
 | Need | Tool |
 |------|------|
+| Index the current worktree | `index_folder` |
+| Register and index a repo explicitly | `index_repo` |
 | Find a function, class, or method by name | `search_symbols` |
 | Find code by intent or behavior | `semantic_search` |
-| Find literal text or regex matches | `text_search` |
+| Find literal text or regex matches | `search_text` |
 | Read exact source for one symbol | `get_symbol` |
-| Get a file outline before reading | `focus_file` |
+| Get a file outline before reading | `get_file_outline` |
+| Get a repo map or summary | `get_repo_outline` or `get_file_tree` |
 | Trace who calls a symbol | `get_callers` |
 | Trace what a symbol calls | `get_callees` |
 | Find HTTP routes | `search_routes` |
 | Check repo freshness | `get_index_status` |
+| Get code metrics and language mix | `get_repo_stats` |
 | List indexes | `list_repos` |
 | Clean deleted-worktree indexes | `gc_stale_indexes` |
 
-## Workflow
+## Typical Flow
 
-1. Search first.
-2. Prefer the smallest exact slice you need.
-3. Use callers and callees before refactors.
-4. Use routes for endpoint discovery.
-5. Fall back to normal file reads only when SymDex cannot answer.
+1. Confirm the repo id and freshness.
+2. Index with `index_folder` if needed.
+3. Start with `search_symbols`, `semantic_search`, or `search_text`.
+4. Narrow to `get_symbol` or `get_file_outline`.
+5. Use `get_callers`, `get_callees`, `search_routes`, or `get_repo_stats` for deeper analysis.
+6. Fall back to direct file reads only when SymDex cannot answer precisely enough.
 
 ## Decision Guide
 
@@ -71,14 +68,18 @@ Use SymDex first for code exploration.
 - "Who uses this?" -> `get_callers`
 - "What does this call?" -> `get_callees`
 - "Where is the endpoint?" -> `search_routes`
+- "Show me the file structure first" -> `get_file_outline`
+- "Give me a repo-level picture" -> `get_repo_outline` or `get_repo_stats`
 - "Is the index current?" -> `get_index_status`
 
-## Rules
+## Good Trigger Phrases
 
-- Always scope tool calls with `repo` when you know it.
-- Use `list_repos` or `get_index_status` when the repo id is unclear.
-- Do not read whole files just to hunt for a symbol.
-- For generated files or unsupported file types, use normal file browsing as a fallback.
+- "Find the function that validates JWTs"
+- "Who calls this route handler?"
+- "Show me the outline of this file"
+- "Search for the code that parses webhook payloads"
+- "Find the HTTP route for `/api/checkout`"
+- "Give me the repo summary before I edit anything"
 
 ## Editing
 
@@ -88,18 +89,17 @@ When you need to edit code:
 2. Read only that file or symbol slice.
 3. Make the smallest change needed.
 
-## Good Use Cases
+## Use Normal Browsing Only When Needed
 
-- Locating a symbol before editing
-- Tracing dependencies before refactoring
-- Exploring an unfamiliar repository
-- Finding the route that serves a request path
-- Checking whether the current index is fresh enough to trust
+- SymDex is unavailable.
+- The repo is not indexed and cannot be indexed in the current environment.
+- The target file type is unsupported or generated.
+- You need surrounding context that the symbol-level response does not provide.
 
 ## Output Checklist
 
 - [ ] Repo id confirmed or derived
 - [ ] Index freshness checked
 - [ ] SymDex tool chosen before broad file reads
-- [ ] Exact symbol or slice read instead of whole file when possible
-- [ ] Fall back to normal file reads only when needed
+- [ ] Exact symbol or file outline used before whole-file reads when possible
+- [ ] Direct file reads used only when SymDex could not answer cleanly
