@@ -39,6 +39,9 @@ pip install symdex
 
 # Or run with uvx (no install step)
 uvx symdex --help
+
+# Install the SymDex agent skill globally for supported agents
+npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --yes --global
 ```
 
 </div>
@@ -50,8 +53,10 @@ uvx symdex --help
 Install the SymDex code-search skill to make agents use SymDex first for code exploration:
 
 ```bash
-npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search
+npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --yes --global
 ```
+
+If you want the interactive installer instead, omit `--yes --global`.
 
 What it does:
 - Uses SymDex before Read/Grep/Glob for code discovery
