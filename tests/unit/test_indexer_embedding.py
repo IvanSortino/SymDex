@@ -4,6 +4,8 @@
 import numpy as np
 import uuid
 import shutil
+import sys
+import logging
 from pathlib import Path
 from unittest.mock import patch
 from symdex.core.storage import get_connection, query_symbols_with_embeddings
@@ -61,3 +63,32 @@ def test_indexing_stores_voyage_asset_embedding(monkeypatch):
         assert rows[0]["embedding"] is not None
     finally:
         shutil.rmtree(repo_dir, ignore_errors=True)
+
+
+def test_indexing_without_local_extra_skips_embeddings_once(tmp_path, monkeypatch, caplog):
+    (tmp_path / "foo.py").write_text(
+        'def hello():\n    """Say hello to the world."""\n    pass\n'
+    )
+    db_path = str(tmp_path / "test.db")
+
+    monkeypatch.delenv("SYMDEX_EMBED_BACKEND", raising=False)
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+
+    from symdex.core.indexer import index_folder
+
+    with caplog.at_level(logging.WARNING):
+        with patch("symdex.core.storage.get_db_path", return_value=db_path):
+            with patch("symdex.core.indexer.get_db_path", return_value=db_path):
+                result = index_folder(str(tmp_path), name="embedskip")
+
+    conn = get_connection(db_path)
+    rows = query_symbols_with_embeddings(conn, repo="embedskip")
+    conn.close()
+
+    assert result.indexed_count == 1
+    assert rows == []
+    warnings = [
+        record.message for record in caplog.records
+        if "symdex[local]" in record.message
+    ]
+    assert len(warnings) == 1

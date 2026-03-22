@@ -7,6 +7,7 @@ import types
 import uuid
 import shutil
 from pathlib import Path
+import pytest
 from unittest.mock import patch
 from symdex.search.semantic import embed_text, search_semantic, embed_for_index, embed_for_query
 from symdex.core.storage import get_connection, upsert_embedding
@@ -103,6 +104,55 @@ def test_get_model_reports_progress(monkeypatch):
     assert calls[-1] == "Embedding model ready."
 
 
+def test_local_backend_missing_dependency_has_actionable_error(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._model = None
+    monkeypatch.delenv("SYMDEX_EMBED_BACKEND", raising=False)
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+
+    with pytest.raises(RuntimeError, match=r"symdex\[local\]"):
+        semantic_mod.embed_text("hello")
+
+
+def test_voyage_backend_missing_dependency_has_actionable_error(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._voyage_client = None
+    monkeypatch.setenv("SYMDEX_EMBED_BACKEND", "voyage")
+    monkeypatch.setitem(sys.modules, "voyageai", None)
+
+    with pytest.raises(RuntimeError, match=r"symdex\[voyage\]"):
+        semantic_mod.embed_for_query("hello")
+
+
+def test_voyage_backend_works_without_sentence_transformers_installed(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._model = None
+    semantic_mod._voyage_client = None
+    calls: list[tuple] = []
+
+    class _FakeClient:
+        def embed(self, texts, model=None, input_type=None, truncation=None):
+            calls.append((texts, model, input_type, truncation))
+            return types.SimpleNamespace(embeddings=[FAKE_VEC.tolist()])
+
+    monkeypatch.setenv("SYMDEX_EMBED_BACKEND", "voyage")
+    monkeypatch.setenv("SYMDEX_VOYAGE_MODEL", "voyage-code-3")
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+    monkeypatch.setitem(
+        sys.modules,
+        "voyageai",
+        types.SimpleNamespace(Client=lambda api_key=None: _FakeClient()),
+    )
+
+    vec = semantic_mod.embed_for_query("hello")
+
+    assert vec.dtype == np.float32
+    assert calls == [(["hello"], "voyage-code-3", "query", True)]
+
+
 @patch("symdex.search.semantic._get_model")
 def test_embed_for_index_prepends_document_prefix(mock_model):
     """embed_for_index should prepend 'search_document: ' before embedding."""
@@ -131,6 +181,7 @@ def test_voyage_embed_for_index_uses_document_input_type(monkeypatch):
     from symdex.search import semantic as semantic_mod
 
     semantic_mod._model = None
+    semantic_mod._voyage_client = None
     calls: list[tuple] = []
 
     class _FakeClient:

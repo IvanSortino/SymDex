@@ -34,11 +34,14 @@
 </p>
 
 ```bash
-# Install with pip
+# Install the lean core
 pip install symdex
 
-# Or install as an isolated tool
-uv tool install symdex
+# Add local semantic search when you want the sentence-transformers backend
+pip install "symdex[local]"
+
+# Or install the local-backend CLI as an isolated tool
+uv tool install "symdex[local]"
 
 # Or run without installing
 uvx symdex --help
@@ -67,6 +70,7 @@ Current main-branch highlights:
 - `symdex search`, `find`, `text`, and `semantic` print approximate token-savings footers
 - `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
+- local `sentence-transformers` embeddings now live behind the optional `symdex[local]` extra
 - Voyage AI is available as an optional embedding backend, including optional multimodal asset indexing
 
 ---
@@ -97,9 +101,9 @@ Installing through the `skills` CLI is also the path that feeds skills.sh discov
 
 ```bash
 # Install
-pip install symdex
+pip install "symdex[local]"
 # or
-uv tool install symdex
+uv tool install "symdex[local]"
 
 # Index a project
 symdex index ./myproject --repo myproject
@@ -169,7 +173,7 @@ HTTP mode:
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
 | Search ROI footer | Approximate token savings after successful search commands |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
-| Optional Voyage backend | Use hosted embeddings instead of local sentence-transformers |
+| Optional embedding backends | Add `symdex[local]` for local embeddings or `symdex[voyage]` for hosted embeddings only when needed |
 
 ---
 
@@ -301,11 +305,19 @@ SymDex works with any MCP client that supports stdio or streamable HTTP.
 
 ## Voyage AI embeddings
 
-SymDex defaults to local `sentence-transformers`. Voyage AI is an optional hosted backend for users who want to offload embedding work to the cloud.
+Base `symdex` now installs the lean core only. Choose the embedding extra that matches how you want semantic search to work:
+
+- `symdex[local]` for local `sentence-transformers`
+- `symdex[voyage]` for Voyage text embeddings
+- `symdex[voyage-multimodal]` for Voyage text plus images and PDFs
+
+Voyage AI is the hosted backend for users who want to offload embedding work to the cloud.
 
 ### Text mode
 
 ```bash
+pip install "symdex[voyage]"
+
 SYMDEX_EMBED_BACKEND=voyage \
 VOYAGE_API_KEY=... \
 SYMDEX_VOYAGE_MODEL=voyage-code-3 \
@@ -319,6 +331,8 @@ symdex semantic "parse source code" --repo myrepo
 ### Multimodal mode
 
 ```bash
+pip install "symdex[voyage-multimodal]"
+
 SYMDEX_EMBED_BACKEND=voyage
 SYMDEX_VOYAGE_MULTIMODAL=1
 VOYAGE_API_KEY=...
@@ -328,14 +342,13 @@ symdex index . --repo myrepo
 
 Multimodal mode lets SymDex index supported images, screenshots, and PDFs as searchable asset entries.
 
-Requirements:
-- `voyageai`
-- `pillow`
-- `pymupdf`
-
 Notes:
-- Voyage is opt-in. If `SYMDEX_EMBED_BACKEND` is unset, SymDex keeps using local embeddings.
-- Local semantic search uses `sentence-transformers` and downloads the model on first use.
+- Base `symdex` keeps symbol, text, route, and call-graph features without pulling in the local embedding stack.
+- Voyage is opt-in. If `SYMDEX_EMBED_BACKEND` is unset, SymDex keeps using the local backend when `symdex[local]` is installed.
+- Local semantic search requires `symdex[local]` and downloads the model on first use.
+- Voyage text mode requires `symdex[voyage]`.
+- Voyage multimodal mode requires `symdex[voyage-multimodal]`.
+- If the selected backend extra is missing, SymDex prints an actionable install hint.
 - Multimodal indexing is only active when `SYMDEX_VOYAGE_MULTIMODAL=1`.
 
 ---
@@ -352,7 +365,10 @@ A code summary with files, Lines of Code, symbol counts, routes, skipped files, 
 An approximate ROI footer showing lines searched, tokens that would likely have been spent without SymDex, tokens used with SymDex, and tokens saved.
 
 **Does semantic search require the internet?**
-Not by default. The local backend downloads its model once and then runs offline. Voyage mode requires network access and a `VOYAGE_API_KEY`.
+Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.
+
+**Can I install SymDex without sentence-transformers?**
+Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph features without the local embedding dependencies. Install `symdex[local]` only when you want local semantic search.
 
 **Can I use SymDex on multiple repos and worktrees?**
 Yes. SymDex maintains a central registry, supports explicit `--repo` names, and can auto-generate stable repo ids from the current branch and worktree path when you omit `--repo`.

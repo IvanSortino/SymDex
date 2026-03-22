@@ -28,6 +28,14 @@ from symdex.core.storage import (
 )
 
 logger = logging.getLogger(__name__)
+_OPTIONAL_EMBEDDING_WARNINGS: set[str] = set()
+
+
+def _warn_optional_embedding_once(message: str) -> None:
+    if message in _OPTIONAL_EMBEDDING_WARNINGS:
+        return
+    _OPTIONAL_EMBEDDING_WARNINGS.add(message)
+    logger.warning(message)
 
 def _embed_symbols(
     conn,
@@ -61,6 +69,12 @@ def _embed_symbols(
         try:
             vec = embed_for_index(embed_input, progress_callback=progress_callback)
             upsert_embedding(conn, symbol_id, vec)
+        except RuntimeError as exc:
+            message = str(exc)
+            if "symdex[" in message:
+                _warn_optional_embedding_once(message)
+                return
+            logger.warning("Embedding failed for symbol %s (id=%s): %s", name, symbol_id, exc)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Embedding failed for symbol %s (id=%s): %s", name, symbol_id, exc)
 
@@ -209,6 +223,13 @@ def index_folder(
                             (repo, rel_file, asset_name),
                         ).fetchone()["id"]
                         upsert_embedding(conn, asset_id, vec)
+                    except RuntimeError as exc:
+                        message = str(exc)
+                        if "symdex[" in message:
+                            _warn_optional_embedding_once(message)
+                            continue
+                        logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
+                        errored += 1
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
                         errored += 1
