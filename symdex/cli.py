@@ -27,7 +27,7 @@ from symdex.core.storage import (
     search_text_in_index,
     upsert_repo,
 )
-from symdex.core.token_metrics import build_search_roi_summary_from_rows
+from symdex.core.token_metrics import build_search_roi_summary_from_rows, format_search_roi_summary
 from symdex.core.updates import get_update_notice
 from symdex.search.symbol_search import search_symbols as _search_symbols
 from symdex.search.semantic import search_semantic as _search_semantic
@@ -144,6 +144,13 @@ def _search_roi_summary(repo: str, rows: list[dict], result_kind: str) -> dict |
         conn.close()
 
 
+def _attach_roi_payload(payload: dict, roi: dict | None) -> dict:
+    if roi is not None:
+        payload["roi"] = roi
+        payload["roi_summary"] = format_search_roi_summary(roi)
+    return payload
+
+
 @app.command()
 def index(
     path: str = typer.Argument(..., help="Directory to index"),
@@ -202,8 +209,7 @@ def search(
         payload = {"symbols": symbols}
         if repo:
             roi = _search_roi_summary(repo, symbols, "symbol")
-            if roi is not None:
-                payload["roi"] = roi
+            _attach_roi_payload(payload, roi)
         typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Symbols matching '{query}'")
@@ -243,8 +249,7 @@ def find(
     if json_output:
         payload = {"symbols": symbols}
         roi = _search_roi_summary(repo, symbols, "symbol")
-        if roi is not None:
-            payload["roi"] = roi
+        _attach_roi_payload(payload, roi)
         typer.echo(json.dumps(payload))
         return
     s = symbols[0]
@@ -316,8 +321,7 @@ def text(
     if json_output:
         payload = {"matches": matches}
         roi = _search_roi_summary(repo, matches, "text")
-        if roi is not None:
-            payload["roi"] = roi
+        _attach_roi_payload(payload, roi)
         typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Text matches for '{query}'")
@@ -366,8 +370,7 @@ def semantic(
     if json_output:
         payload = {"symbols": results}
         roi = _search_roi_summary(repo, results, "symbol")
-        if roi is not None:
-            payload["roi"] = roi
+        _attach_roi_payload(payload, roi)
         typer.echo(json.dumps(payload))
         return
     table = Table(title=f"Semantic matches for '{query}'")
