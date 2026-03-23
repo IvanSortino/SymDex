@@ -56,4 +56,4 @@ def test_index_folder_extracts_mobile_language_call_graph(tmp_path, filename, so
     callees = get_callees(conn, "caller", "mobile_call_graph")
     conn.close()
 
-    assert any(callee["name"] == "callee" for callee in callees)
+    assert [callee["name"] for callee in callees] == ["callee"]

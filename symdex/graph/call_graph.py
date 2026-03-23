@@ -128,10 +128,12 @@ def extract_edges(
         sym_id = sym.get("id")
         if sym_id is None:
             continue
+        if sym.get("kind") not in {"function", "method"}:
+            continue
         start_b = sym.get("start_byte", 0)
         end_b = sym.get("end_byte", 0)
         callee_names = _find_calls_in_range(tree.root_node, start_b, end_b, lang_name=lang_name or "", source_bytes=source_bytes)
-        for callee_name in callee_names:
+        for callee_name in dict.fromkeys(callee_names):
             # Attempt to resolve file
             row = conn.execute(
                 "SELECT file FROM symbols WHERE repo=? AND name=? LIMIT 1",

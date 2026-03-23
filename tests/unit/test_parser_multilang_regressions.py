@@ -316,6 +316,8 @@ def test_dart_functions_include_bodies_and_lambda_assignments(tmp_path):
     assert by_name["method"]["kind"] == "method"
     assert by_name["top"]["kind"] == "function"
     assert by_name["formatter"]["kind"] == "function"
+    assert sum(1 for symbol in symbols if symbol["name"] == "method") == 1
+    assert sum(1 for symbol in symbols if symbol["name"] == "top") == 1
     assert "service.fetchAll()" in source[by_name["method"]["start_byte"]:by_name["method"]["end_byte"]]
     assert "createUser()" in source[by_name["top"]["start_byte"]:by_name["top"]["end_byte"]]
 
