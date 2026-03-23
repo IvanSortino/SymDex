@@ -496,9 +496,13 @@ def _walk_and_extract(
             continue
 
         if node_type in kind_map:
-            if lang_name == "dart" and node_type == "declaration" and not _dart_declaration_is_callable(node):
-                stack.extend(reversed(node.children))
-                continue
+            if lang_name == "dart":
+                if node_type == "declaration" and not _dart_declaration_is_callable(node):
+                    stack.extend(reversed(node.children))
+                    continue
+                if node_type == "function_signature" and _parent_type(node) == "method_signature":
+                    stack.extend(reversed(node.children))
+                    continue
 
             kind = _adjust_kind_for_context(node, lang_name, kind_map[node_type], source_bytes)
 
