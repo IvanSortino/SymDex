@@ -16,10 +16,15 @@ except ImportError:
     Language = None  # type: ignore
     TSParser = None  # type: ignore
 
+try:
+    from tree_sitter_language_pack import get_language as _get_language_from_pack
+except ImportError:  # pragma: no cover - optional fallback
+    _get_language_from_pack = None
+
 logger = logging.getLogger(__name__)
 
 # Map file extension -> (language_name, grammar_module, preferred_loader_attr)
-_EXT_MAP: dict[str, tuple[str, str, Optional[str]]] = {
+_EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".py":   ("python",     "tree_sitter_python", None),
     ".js":   ("javascript", "tree_sitter_javascript", None),
     ".jsx":  ("javascript", "tree_sitter_javascript", None),
@@ -38,6 +43,10 @@ _EXT_MAP: dict[str, tuple[str, str, Optional[str]]] = {
     ".ex":   ("elixir",     "tree_sitter_elixir", None),
     ".exs":  ("elixir",     "tree_sitter_elixir", None),
     ".rb":   ("ruby",       "tree_sitter_ruby", None),
+    ".kt":   ("kotlin",     "tree_sitter_kotlin", None),
+    ".kts":  ("kotlin",     "tree_sitter_kotlin", None),
+    ".dart": ("dart",       None, None),
+    ".swift": ("swift",     None, None),
 }
 # node_type → kind mapping per language
 _NODE_KINDS: dict[str, dict[str, str]] = {
@@ -49,11 +58,19 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
     "javascript": {
         "function_declaration": "function",
         "class_declaration": "class",
+        "method_definition": "method",
     },
     "typescript": {
         "function_declaration": "function",
         "class_declaration": "class",
+        "abstract_class_declaration": "class",
         "interface_declaration": "class",
+        "method_definition": "method",
+        "method_signature": "method",
+        "abstract_method_signature": "method",
+        "function_signature": "function",
+        "type_alias_declaration": "type",
+        "enum_declaration": "enum",
     },
     "go": {
         "function_declaration": "function",
@@ -62,8 +79,8 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
     },
     "rust": {
         "function_item": "function",
+        "function_signature_item": "function",
         "struct_item": "class",
-        "impl_item": "class",
         "trait_item": "class",
     },
     "java": {
@@ -100,6 +117,25 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
         "class": "class",
         "module": "class",
     },
+    "kotlin": {
+        "function_declaration": "function",
+        "class_declaration": "class",
+        "type_alias": "type",
+    },
+    "dart": {
+        "class_definition": "class",
+        "function_signature": "function",
+        "method_signature": "method",
+        "declaration": "function",
+        "enum_declaration": "enum",
+        "type_alias": "type",
+    },
+    "swift": {
+        "class_declaration": "class",
+        "function_declaration": "function",
+        "protocol_declaration": "class",
+        "protocol_function_declaration": "method",
+    },
 }
 
 
@@ -119,39 +155,53 @@ def _get_language(ext: str):
     if not entry:
         return None, None
     lang_name, module_name, preferred_loader = entry
-    try:
-        mod = importlib.import_module(module_name)
-        loader_candidates = []
-        if preferred_loader:
-            loader_candidates.append(preferred_loader.upper())
-            loader_candidates.append(preferred_loader)
-        loader_candidates.extend(
-            [
-                "LANGUAGE",
-                "language",
-                f"LANGUAGE_{lang_name.upper()}",
-                f"language_{lang_name}",
-                "LANGUAGE_TYPESCRIPT",
-                "language_typescript",
-                "LANGUAGE_PHP",
-                "language_php",
-            ]
-        )
-        language = None
-        for attr in dict.fromkeys(loader_candidates):
-            val = getattr(mod, attr, None)
-            if val is not None:
-                language_ptr = val() if callable(val) else val
-                language = Language(language_ptr)
-                break
-        if language is None:
-            raise AttributeError(
-                f"No supported language loader found in module {module_name}"
+    module_error: Exception | None = None
+    language = None
+
+    if module_name:
+        try:
+            mod = importlib.import_module(module_name)
+            loader_candidates = []
+            if preferred_loader:
+                loader_candidates.append(preferred_loader.upper())
+                loader_candidates.append(preferred_loader)
+            loader_candidates.extend(
+                [
+                    "LANGUAGE",
+                    "language",
+                    f"LANGUAGE_{lang_name.upper()}",
+                    f"language_{lang_name}",
+                    "LANGUAGE_TYPESCRIPT",
+                    "language_typescript",
+                    "LANGUAGE_PHP",
+                    "language_php",
+                ]
             )
+            for attr in dict.fromkeys(loader_candidates):
+                val = getattr(mod, attr, None)
+                if val is not None:
+                    language_ptr = val() if callable(val) else val
+                    language = Language(language_ptr)
+                    break
+            if language is None:
+                raise AttributeError(
+                    f"No supported language loader found in module {module_name}"
+                )
+        except Exception as exc:
+            module_error = exc
+
+    if language is None and _get_language_from_pack is not None:
+        try:
+            language = _get_language_from_pack(lang_name)
+        except Exception:
+            language = None
+
+    if language is not None:
         return lang_name, language
-    except Exception as exc:
-        logger.warning("Could not load grammar %s: %s", module_name, exc)
-        return lang_name, None
+
+    if module_name and module_error is not None:
+        logger.warning("Could not load grammar %s: %s", module_name, module_error)
+    return lang_name, None
 
 
 def _extract_name(node, source_bytes: bytes) -> Optional[str]:
@@ -163,7 +213,7 @@ def _extract_name(node, source_bytes: bytes) -> Optional[str]:
     stack = list(node.children)
     while stack:
         child = stack.pop(0)
-        if child.type in ("identifier", "type_identifier", "field_identifier", "constant"):
+        if child.type in ("identifier", "type_identifier", "field_identifier", "constant", "simple_identifier"):
             return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
         stack.extend(list(child.children))
     return None
@@ -253,6 +303,96 @@ def _extract_vue_script(source_bytes: bytes) -> tuple[bytes, int, str]:
     return match.group(2), match.start(2), lang_name
 
 
+def _parent_type(node) -> str | None:
+    parent = node.parent
+    return parent.type if parent is not None else None
+
+
+def _has_ancestor_type(node, target_types: set[str], *, max_depth: int = 4) -> bool:
+    current = node.parent
+    depth = 0
+    while current is not None and depth < max_depth:
+        if current.type in target_types:
+            return True
+        current = current.parent
+        depth += 1
+    return False
+
+
+def _grandparent_type(node) -> str | None:
+    parent = node.parent
+    if parent is None or parent.parent is None:
+        return None
+    return parent.parent.type
+
+
+def _modifier_text(node, source_bytes: bytes) -> str:
+    for child in node.children:
+        if child.type == "modifiers":
+            return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+    return ""
+
+
+def _node_has_direct_child(node, child_type: str) -> bool:
+    return any(child.type == child_type for child in node.children)
+
+
+def _dart_declaration_is_callable(node) -> bool:
+    return any(child.type == "function_signature" for child in node.children)
+
+
+def _symbol_span(node, lang_name: str) -> tuple[int, int]:
+    start_byte = node.start_byte
+    end_byte = node.end_byte
+
+    if lang_name == "dart" and node.type in {"function_signature", "method_signature"}:
+        next_named = getattr(node, "next_named_sibling", None)
+        if next_named is not None and next_named.type == "function_body":
+            end_byte = next_named.end_byte
+
+    return start_byte, end_byte
+
+
+def _adjust_kind_for_context(node, lang_name: str, kind: str, source_bytes: bytes) -> str:
+    """Refine symbol kind using AST context when grammars reuse node types."""
+    if lang_name == "python" and node.type == "function_definition":
+        if _has_ancestor_type(node, {"class_definition"}):
+            return "method"
+
+    if lang_name == "rust" and node.type in {"function_item", "function_signature_item"}:
+        if _has_ancestor_type(node, {"impl_item", "trait_item"}):
+            return "method"
+
+    if lang_name == "cpp" and node.type == "function_definition":
+        if _has_ancestor_type(node, {"class_specifier", "struct_specifier"}):
+            return "method"
+
+    if lang_name == "ruby" and node.type == "method":
+        if _has_ancestor_type(node, {"class", "module", "singleton_class"}):
+            return "method"
+        return "function"
+
+    if lang_name == "kotlin":
+        if node.type == "function_declaration" and _has_ancestor_type(node, {"class_declaration", "companion_object"}):
+            return "method"
+        if node.type == "class_declaration" and "enum" in _modifier_text(node, source_bytes).split():
+            return "enum"
+
+    if lang_name == "dart":
+        if node.type in {"function_signature", "method_signature", "declaration"}:
+            if _has_ancestor_type(node, {"class_definition"}):
+                return "method"
+            return "function"
+
+    if lang_name == "swift":
+        if node.type == "function_declaration" and _has_ancestor_type(node, {"class_declaration", "protocol_declaration"}):
+            return "method"
+        if node.type == "class_declaration" and _node_has_direct_child(node, "enum"):
+            return "enum"
+
+    return kind
+
+
 def _walk_and_extract(
     root_node,
     source_bytes: bytes,
@@ -287,7 +427,7 @@ def _walk_and_extract(
         # JS/TS: arrow functions assigned to const/let/var
         if lang_name in ("javascript", "typescript") and node_type == "variable_declarator":
             value = node.child_by_field_name("value")
-            if value and value.type == "arrow_function":
+            if value and value.type in {"arrow_function", "function_expression"}:
                 name_node = node.child_by_field_name("name")
                 if name_node:
                     name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
@@ -304,8 +444,63 @@ def _walk_and_extract(
             stack.extend(reversed(node.children))
             continue
 
+        if lang_name == "kotlin" and node_type == "property_declaration":
+            lambda_node = next((child for child in node.children if child.type == "lambda_literal"), None)
+            var_node = next((child for child in node.children if child.type == "variable_declaration"), None)
+            name = _extract_name(var_node, source_bytes) if var_node is not None else None
+            if lambda_node is not None and name:
+                results.append({
+                    "name": name,
+                    "file": rel_path,
+                    "kind": "function",
+                    "start_byte": lambda_node.start_byte,
+                    "end_byte": lambda_node.end_byte,
+                    "signature": _extract_signature(node, source_bytes),
+                    "docstring": _extract_comment_docstring(node, source_bytes),
+                })
+            stack.extend(reversed(node.children))
+            continue
+
+        if lang_name == "swift" and node_type == "property_declaration":
+            lambda_node = next((child for child in node.children if child.type == "lambda_literal"), None)
+            pattern_node = next((child for child in node.children if child.type == "pattern"), None)
+            name = _extract_name(pattern_node, source_bytes) if pattern_node is not None else None
+            if lambda_node is not None and name:
+                results.append({
+                    "name": name,
+                    "file": rel_path,
+                    "kind": "function",
+                    "start_byte": lambda_node.start_byte,
+                    "end_byte": lambda_node.end_byte,
+                    "signature": _extract_signature(node, source_bytes),
+                    "docstring": _extract_comment_docstring(node, source_bytes),
+                })
+            stack.extend(reversed(node.children))
+            continue
+
+        if lang_name == "dart" and node_type == "static_final_declaration":
+            fn_expr = next((child for child in node.children if child.type == "function_expression"), None)
+            name_node = next((child for child in node.children if child.type == "identifier"), None)
+            if fn_expr is not None and name_node is not None:
+                name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+                results.append({
+                    "name": name,
+                    "file": rel_path,
+                    "kind": "function",
+                    "start_byte": fn_expr.start_byte,
+                    "end_byte": fn_expr.end_byte,
+                    "signature": _extract_signature(node, source_bytes),
+                    "docstring": _extract_comment_docstring(node, source_bytes),
+                })
+            stack.extend(reversed(node.children))
+            continue
+
         if node_type in kind_map:
-            kind = kind_map[node_type]
+            if lang_name == "dart" and node_type == "declaration" and not _dart_declaration_is_callable(node):
+                stack.extend(reversed(node.children))
+                continue
+
+            kind = _adjust_kind_for_context(node, lang_name, kind_map[node_type], source_bytes)
 
             # Python decorated_definition: push the inner definition only
             if lang_name == "python" and node_type == "decorated_definition":
@@ -321,12 +516,13 @@ def _walk_and_extract(
                     if lang_name == "python"
                     else _extract_comment_docstring(node, source_bytes)
                 )
+                start_byte, end_byte = _symbol_span(node, lang_name)
                 results.append({
                     "name": name,
                     "file": rel_path,
                     "kind": kind,
-                    "start_byte": node.start_byte,
-                    "end_byte": node.end_byte,
+                    "start_byte": start_byte,
+                    "end_byte": end_byte,
                     "signature": _extract_signature(node, source_bytes),
                     "docstring": docstring,
                 })
