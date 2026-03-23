@@ -29,6 +29,24 @@ from symdex.core.storage import (
 
 logger = logging.getLogger(__name__)
 _OPTIONAL_EMBEDDING_WARNINGS: set[str] = set()
+_ROUTE_LANG_MAP = {
+    ".py": "python",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".php": "php",
+    ".go": "go",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".cs": "csharp",
+    ".rb": "ruby",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".rs": "rust",
+}
 
 
 def _warn_optional_embedding_once(message: str) -> None:
@@ -253,12 +271,6 @@ def index_folder(
                         (repo, rel_file),
                     ).fetchall()
                     _extract_edges(conn, repo=repo, file_path=rel_file, abs_file=abs_file, symbols=[dict(r) for r in sym_rows])
-                    # Route extraction for Python and JS/TS files
-                    _ROUTE_LANG_MAP = {
-                        ".py": "python", ".js": "javascript", ".ts": "typescript",
-                        ".jsx": "javascript", ".tsx": "typescript",
-                        ".php": "php",
-                    }
                     file_lang = _ROUTE_LANG_MAP.get(ext)
                     if file_lang:
                         try:

@@ -3,67 +3,52 @@
 # License: See LICENSE file in the project root.
 
 from __future__ import annotations
-import importlib
 import logging
 import os
+import re
 import sqlite3
+
+from symdex.core.parser import _get_language as _parser_get_language
 
 logger = logging.getLogger(__name__)
 
-_EXT_MAP: dict[str, tuple[str, str]] = {
-    ".py":   ("python",     "tree_sitter_python"),
-    ".js":   ("javascript", "tree_sitter_javascript"),
-    ".mjs":  ("javascript", "tree_sitter_javascript"),
-    ".ts":   ("typescript", "tree_sitter_typescript"),
-    ".tsx":  ("typescript", "tree_sitter_typescript"),
-    ".go":   ("go",         "tree_sitter_go"),
-    ".rs":   ("rust",       "tree_sitter_rust"),
-    ".java": ("java",       "tree_sitter_java"),
+_SUPPORTED_EXTS = {
+    ".py",
+    ".js",
+    ".mjs",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".kt",
+    ".kts",
+    ".dart",
+    ".swift",
 }
+_DART_CALL_RE = re.compile(r"([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(")
 
 
 def _get_language(ext: str):
-    entry = _EXT_MAP.get(ext.lower())
-    if not entry:
+    if ext.lower() not in _SUPPORTED_EXTS:
         return None, None
-    lang_name, module_name = entry
-    try:
-        from tree_sitter import Language, Parser as TSParser  # noqa: F401
-        mod = importlib.import_module(module_name)
-        
-        loader_candidates = [
-            "LANGUAGE",
-            "language",
-            f"LANGUAGE_{lang_name.upper()}",
-            f"language_{lang_name}",
-            "LANGUAGE_TYPESCRIPT",
-            "language_typescript",
-        ]
-        
-        language = None
-        for attr in dict.fromkeys(loader_candidates):
-            val = getattr(mod, attr, None)
-            if val is not None:
-                language_ptr = val() if callable(val) else val
-                language = Language(language_ptr)
-                break
-                
-        if language is None:
-            raise AttributeError(
-                f"No supported language loader found in module {module_name}"
-            )
-            
-        return lang_name, language
-    except Exception as exc:
-        logger.warning("Could not load grammar for %s: %s", ext, exc)
-        return None, None
+    return _parser_get_language(ext)
 
 
-def _find_calls_in_range(node, start_byte: int, end_byte: int) -> list[str]:
+def _extract_callee_name_from_text(raw: str) -> str | None:
+    text = raw.strip()
+    if not text:
+        return None
+    text = text.split(".")[-1]
+    return text or None
+
+
+def _find_calls_in_range(node, start_byte: int, end_byte: int, *, lang_name: str, source_bytes: bytes) -> list[str]:
     """Return callee names for all call nodes within [start_byte, end_byte)."""
     results = []
     if node.end_byte <= start_byte or node.start_byte >= end_byte:
         return results
+
     if node.type == "call" and start_byte <= node.start_byte < end_byte:
         func_node = node.child_by_field_name("function")
         if func_node:
@@ -74,8 +59,33 @@ def _find_calls_in_range(node, start_byte: int, end_byte: int) -> list[str]:
                 name = func_node.text.decode("utf-8", "replace")
             if name:
                 results.append(name)
+
+    if node.type == "call_expression" and start_byte <= node.start_byte < end_byte:
+        func_node = node.child_by_field_name("function")
+        if func_node is None:
+            func_node = next(
+                (
+                    child
+                    for child in node.children
+                    if child.is_named and child.type not in {"value_arguments", "call_suffix", "argument_part"}
+                ),
+                None,
+            )
+        if func_node is not None:
+            raw = source_bytes[func_node.start_byte:func_node.end_byte].decode("utf-8", "replace")
+            name = _extract_callee_name_from_text(raw)
+            if name:
+                results.append(name)
+
+    if lang_name == "dart" and node.type in {"function_body", "expression_statement"}:
+        text = source_bytes[node.start_byte:node.end_byte].decode("utf-8", "replace")
+        for match in _DART_CALL_RE.finditer(text):
+            name = _extract_callee_name_from_text(match.group(1))
+            if name and name not in {"if", "for", "while", "switch", "return"}:
+                results.append(name)
+
     for child in node.children:
-        results.extend(_find_calls_in_range(child, start_byte, end_byte))
+        results.extend(_find_calls_in_range(child, start_byte, end_byte, lang_name=lang_name, source_bytes=source_bytes))
     return results
 
 
@@ -90,7 +100,7 @@ def extract_edges(
     if not symbols:
         return
     ext = os.path.splitext(abs_file)[1]
-    _, language = _get_language(ext)
+    lang_name, language = _get_language(ext)
     if language is None:
         return
 
@@ -120,7 +130,7 @@ def extract_edges(
             continue
         start_b = sym.get("start_byte", 0)
         end_b = sym.get("end_byte", 0)
-        callee_names = _find_calls_in_range(tree.root_node, start_b, end_b)
+        callee_names = _find_calls_in_range(tree.root_node, start_b, end_b, lang_name=lang_name or "", source_bytes=source_bytes)
         for callee_name in callee_names:
             # Attempt to resolve file
             row = conn.execute(

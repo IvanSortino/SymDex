@@ -2,9 +2,9 @@
 
 # SymDex
 
-**Make AI coding agents stop burning whole files worth of tokens to find one thing.**
+**The codebase oracle AI coding agents wish every repo already had.**
 
-*Index once. Find the exact symbol, route, or call path. Read only what you need.*
+*Index once. Jump straight to the exact symbol, route, caller, callee, or file slice. Read only what you need.*
 
 <br>
 
@@ -64,6 +64,12 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 SymDex exists for one reason:
 - stop agents from reading whole files just to find one function
 
+In plain terms:
+- SymDex is not another grep wrapper and not another black-box hosted index
+- SymDex is the repo-local intelligence layer that makes coding agents feel like they already know your codebase
+- it turns blind file-browsing into exact retrieval
+- and it does that while cutting token spend hard
+
 SymDex pre-indexes a repository into:
 - a symbol table with byte offsets
 - semantic embeddings for intent search
@@ -76,6 +82,8 @@ That lets an agent jump straight to the exact symbol or file slice it needs, whi
 Current main-branch highlights:
 - `symdex index` prints a code summary with files, Lines of Code, symbol counts, routes, skipped files, and language breakdown
 - `symdex search`, `find`, `text`, and `semantic` print approximate token-savings footers
+- Kotlin, Dart, and Swift are now grammar-backed parser targets, so Android, Flutter, and iOS codebases are first-class citizens
+- route extraction now covers Spring and Kotlin, Gin-style Go routers, ASP.NET, Rails and Sinatra, Phoenix, and Actix in addition to Python, JS/TS, and Laravel
 - normal CLI commands now show an upgrade notice when a newer SymDex release is available
 - `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
@@ -179,7 +187,7 @@ HTTP mode:
 | File outline | List symbols in a file without transferring the whole file |
 | Repo outline | Get a directory tree plus repo summary through MCP |
 | Call graph | Trace callers, callees, and circular dependencies |
-| HTTP routes | Extract Flask, FastAPI, Django, Express-style JS/TS, and Laravel PHP routes |
+| HTTP routes | Extract Flask, FastAPI, Django, Express, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix routes |
 | Auto-watch | Re-index on change and keep the index fresh |
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
 | Search ROI footer | Approximate token savings after successful search commands |
@@ -279,6 +287,9 @@ SymDex currently exposes 20 MCP tools:
 | Go | `.go` |
 | Rust | `.rs` |
 | Java | `.java` |
+| Kotlin | `.kt`, `.kts` |
+| Dart | `.dart` |
+| Swift | `.swift` |
 | PHP | `.php` |
 | C# | `.cs` |
 | C | `.c` |
@@ -287,7 +298,7 @@ SymDex currently exposes 20 MCP tools:
 | Ruby | `.rb` |
 | Vue | `.vue` script blocks parsed as JavaScript or TypeScript |
 
-Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/).
+Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) plus grammar fallbacks that keep mobile ecosystems covered too.
 
 ---
 
