@@ -93,6 +93,24 @@ def build_search_roi_summary(
     }
 
 
+def format_search_roi_summary(summary: dict) -> str:
+    """Return a plain-English ROI summary suitable for CLI JSON and MCP clients."""
+    approx = "Approximate " if summary.get("approximate") else ""
+    files_searched = summary.get("files_searched", 0)
+    lines_searched = summary.get("lines_searched", 0)
+    without = summary.get("estimated_tokens_without_symdex", 0)
+    with_symdex = summary.get("estimated_tokens_with_symdex", 0)
+    saved = summary.get("estimated_tokens_saved", 0)
+    file_label = "file" if files_searched == 1 else "files"
+    line_label = "line" if lines_searched == 1 else "lines"
+    return (
+        f"{approx}token savings: ~{saved} saved "
+        f"(~{without} without SymDex -> ~{with_symdex} with SymDex, "
+        f"{lines_searched} {line_label} across {files_searched} {file_label}). "
+        "You're in good hands."
+    )
+
+
 def build_search_roi_summary_from_rows(
     conn: sqlite3.Connection,
     repo: str,

@@ -104,6 +104,81 @@ def test_get_model_reports_progress(monkeypatch):
     assert calls[-1] == "Embedding model ready."
 
 
+def test_get_model_retries_after_closed_hf_client(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._model = None
+    load_attempts: list[str] = []
+    reset_calls: list[str] = []
+
+    class _FakeModel:
+        def encode(self, text, normalize_embeddings=True):
+            return FAKE_VEC
+
+    def _factory(model_name):
+        load_attempts.append(model_name)
+        if len(load_attempts) == 1:
+            raise RuntimeError("Cannot send a request, as the client has been closed.")
+        return _FakeModel()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=_factory),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        types.SimpleNamespace(close_session=lambda: reset_calls.append("closed")),
+    )
+
+    model = semantic_mod._get_model()
+
+    assert model is not None
+    assert len(load_attempts) == 2
+    assert reset_calls == ["closed"]
+
+
+def test_get_model_falls_back_to_local_cache_after_closed_hf_client(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    semantic_mod._model = None
+    calls: list[tuple[str, bool]] = []
+    reset_calls: list[str] = []
+
+    class _FakeModel:
+        def encode(self, text, normalize_embeddings=True):
+            return FAKE_VEC
+
+    def _factory(model_name, local_files_only=False):
+        calls.append((model_name, local_files_only))
+        if len(calls) < 3:
+            raise RuntimeError("Cannot send a request, as the client has been closed.")
+        assert local_files_only is True
+        return _FakeModel()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=_factory),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        types.SimpleNamespace(close_session=lambda: reset_calls.append("closed")),
+    )
+
+    model = semantic_mod._get_model()
+
+    assert model is not None
+    assert calls == [
+        ("all-MiniLM-L6-v2", False),
+        ("all-MiniLM-L6-v2", False),
+        ("all-MiniLM-L6-v2", True),
+    ]
+    assert reset_calls == ["closed"]
+
+
 def test_local_backend_missing_dependency_has_actionable_error(monkeypatch):
     from symdex.search import semantic as semantic_mod
 

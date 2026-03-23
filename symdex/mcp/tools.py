@@ -20,7 +20,7 @@ from symdex.core.storage import (
     upsert_repo,
     search_text_in_index,
 )
-from symdex.core.token_metrics import build_search_roi_summary_from_rows
+from symdex.core.token_metrics import build_search_roi_summary_from_rows, format_search_roi_summary
 from symdex.search.symbol_search import search_symbols as _search_symbols
 
 
@@ -107,6 +107,7 @@ def search_symbols_tool(
     response = {"symbols": symbols}
     if roi is not None:
         response["roi"] = roi
+        response["roi_summary"] = format_search_roi_summary(roi)
     return response
 
 
@@ -202,6 +203,7 @@ def search_text_tool(
     response = {"matches": matches}
     if roi is not None:
         response["roi"] = roi
+        response["roi_summary"] = format_search_roi_summary(roi)
     return response
 
 
@@ -293,6 +295,7 @@ def semantic_search_tool(query: str, repo: str | None = None, limit: int = 10) -
     response = {"symbols": results}
     if roi is not None:
         response["roi"] = roi
+        response["roi_summary"] = format_search_roi_summary(roi)
     return response
 
 

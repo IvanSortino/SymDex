@@ -46,6 +46,21 @@ def _missing_extra_message(feature: str, extra: str, package: str) -> str:
     )
 
 
+def _is_closed_hf_client_error(exc: Exception) -> bool:
+    return "client has been closed" in str(exc).lower()
+
+
+def _reset_huggingface_client() -> None:
+    try:
+        from huggingface_hub import close_session  # type: ignore
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        close_session()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _get_model(progress_callback: Optional[Callable[[str], None]] = None):
     global _model
     if _model is None:
@@ -61,7 +76,20 @@ def _get_model(progress_callback: Optional[Callable[[str], None]] = None):
             ) from exc
         model_name = os.environ.get("SYMDEX_EMBED_MODEL", "all-MiniLM-L6-v2")
         _notify(progress_callback, f"Loading embedding model: {model_name}")
-        _model = SentenceTransformer(model_name)
+        try:
+            _model = SentenceTransformer(model_name)
+        except RuntimeError as exc:
+            if not _is_closed_hf_client_error(exc):
+                raise
+            _notify(progress_callback, "Resetting Hugging Face client and retrying model load.")
+            _reset_huggingface_client()
+            try:
+                _model = SentenceTransformer(model_name)
+            except RuntimeError as retry_exc:
+                if not _is_closed_hf_client_error(retry_exc):
+                    raise
+                _notify(progress_callback, "Falling back to the cached local embedding model.")
+                _model = SentenceTransformer(model_name, local_files_only=True)
         _notify(progress_callback, "Embedding model ready.")
     return _model
 

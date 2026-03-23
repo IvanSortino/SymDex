@@ -112,6 +112,8 @@ What it does:
 
 The skill lives in this repo at `skills/symdex-code-search/SKILL.md` and follows the standard `skills/<name>/SKILL.md` layout.
 
+If you are wiring SymDex into an agent workflow directly from this repo, start with [AGENTS.md](AGENTS.md) too.
+
 Installing through the `skills` CLI is also the path that feeds skills.sh discovery telemetry.
 
 ---
@@ -409,7 +411,10 @@ By default, each repo gets its own SQLite database under `~/.symdex`, plus a cen
 A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.
 
 **What do search commands print now?**
-An approximate ROI footer showing lines searched, tokens that would likely have been spent without SymDex, tokens used with SymDex, and tokens saved.
+CLI search commands print an approximate ROI footer showing lines searched, tokens that would likely have been spent without SymDex, tokens used with SymDex, and tokens saved. MCP search tools return the same data as structured `roi` plus a plain-English `roi_summary` string so clients like Codex can surface it more clearly.
+
+**Do existing users get update notices?**
+Yes. Normal human-facing CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.
 
 **Does semantic search require the internet?**
 Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.

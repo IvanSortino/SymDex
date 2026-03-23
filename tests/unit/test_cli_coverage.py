@@ -142,6 +142,9 @@ def test_search_found_json_output(indexed_dir):
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert "symbols" in data
+    assert "roi" in data
+    assert "roi_summary" in data
+    assert "token savings" in data["roi_summary"].lower()
 
 
 def test_search_not_found_exits_1(indexed_dir):
@@ -245,6 +248,9 @@ def test_text_found_json(indexed_dir):
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert "matches" in data
+    assert "roi" in data
+    assert "roi_summary" in data
+    assert "token savings" in data["roi_summary"].lower()
 
 
 def test_text_not_found_exits_1(indexed_dir):

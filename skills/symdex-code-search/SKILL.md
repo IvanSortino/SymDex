@@ -12,6 +12,7 @@ description: |
 
 Use SymDex before broad file browsing.
 Use it to save tokens by retrieving the exact code the agent needs instead of scanning whole files.
+SymDex currently covers 16 language surfaces, including Python, Go, Kotlin, Dart, Swift, and Vue script blocks.
 
 ## Start Here
 
@@ -35,6 +36,7 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - Re-check `get_index_status` after major edits or worktree switches.
 - Read full files only when editing, reviewing unsupported or generated content, or when SymDex cannot answer.
 - Optimize for lower-token retrieval, not broad context loading.
+- If a search tool returns `roi` or `roi_summary`, mention the approximate token savings briefly in your response.
 - If the repo uses workspace-local SymDex state (`./.symdex`), stay inside that workspace so the same index is auto-discovered.
 
 ## Tool Selection
