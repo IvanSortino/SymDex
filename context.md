@@ -2,8 +2,8 @@
 
 ## Current Snapshot
 
-- Version at this checkout: `0.1.19`
-- Git tag at this checkout: `v0.1.19`
+- Version at this checkout: `0.1.20`
+- Git tag at this checkout: `v0.1.20`
 - Exact Git HEAD varies by checkout. Verify locally with `git rev-parse HEAD` when you need the precise commit.
 - Product status: active and productized
 - Primary positioning: repo-local codebase oracle for AI coding agents
@@ -23,6 +23,9 @@ SymDex currently ships:
 - optional embedding backends for local `sentence-transformers` and Voyage AI
 - stable auto-naming for repo ids when `--repo` is omitted on `index` or `watch`
 - upgrade notices on normal human-facing CLI commands
+- visible `--state-dir` support at both the global and subcommand level
+- shell compatibility aliases for `index-folder`, `index-repo`, and `list-repos`
+- clearer semantic-search errors when a repo is unindexed or lacks embeddings
 
 ## Recently Completed Work
 

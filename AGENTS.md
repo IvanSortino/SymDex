@@ -46,8 +46,11 @@ Use it to retrieve the exact symbol, route, caller, callee, or file slice you ne
 - Optional workspace-local state lives in `./.symdex` when `SYMDEX_STATE_DIR=.symdex` or `symdex --state-dir .symdex ...` is used.
 - Workspace-local mode writes repo databases, `registry.db`, and a human-readable `registry.json` manifest inside `./.symdex`.
 - When local state already exists, commands run inside that workspace auto-discover and reuse it.
+- `--state-dir` can be passed either globally or after the subcommand.
 - `--repo` is the canonical naming flag.
 - If `--repo` is omitted on `index` or `watch`, SymDex auto-generates a stable repo id from the current git branch and worktree path hash.
+- MCP tool names and CLI command names are not identical. Canonical shell commands are `index` and `repos`, with compatibility aliases such as `index-folder`, `index-repo`, and `list-repos`.
+- Semantic search only works after embeddings exist in the index. If a repo was indexed before `symdex[local]` or Voyage was enabled, re-index it before relying on `semantic_search`.
 
 ## Install And Upgrade
 

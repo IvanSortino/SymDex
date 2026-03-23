@@ -7,8 +7,8 @@ It indexes source code into a fast local SQLite-backed retrieval layer so agents
 
 ## Current Product State
 
-- Current version: `0.1.19`
-- Release tag at this checkout: `v0.1.19`
+- Current version: `0.1.20`
+- Release tag at this checkout: `v0.1.20`
 - Delivery surfaces: CLI, stdio MCP server, streamable HTTP MCP server
 - Current MCP tool count: 20
 - Supported language surfaces: 16
@@ -47,6 +47,7 @@ Primary human-facing commands:
 - `symdex invalidate`
 - `symdex gc`
 - `symdex serve`
+- `symdex --version`
 
 Behavior guarantees:
 
@@ -54,6 +55,9 @@ Behavior guarantees:
 - Successful search commands print approximate token-savings footers.
 - `--repo` is the canonical repo naming flag.
 - Omitting `--repo` on `index` and `watch` auto-derives a stable repo id from the current git branch and worktree path hash.
+- `--state-dir` works both before and after the subcommand.
+- Shell compatibility aliases exist for `index-folder`, `index-repo`, and `list-repos`.
+- Semantic search fails fast with actionable errors when the repo is unindexed or has no stored embeddings.
 - `--json` stays machine-readable and suppresses human upgrade messaging.
 
 ## MCP Surface
