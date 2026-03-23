@@ -4,6 +4,7 @@
 
 import json
 import os
+import sys
 from typing import Optional
 
 import typer
@@ -26,12 +27,14 @@ from symdex.core.storage import (
     upsert_repo,
 )
 from symdex.core.token_metrics import build_search_roi_summary_from_rows
+from symdex.core.updates import get_update_notice
 from symdex.search.symbol_search import search_symbols as _search_symbols
 from symdex.search.semantic import search_semantic as _search_semantic
 
 app = typer.Typer(name="symdex", help="SymDex — universal code indexer")
 console = Console()
 err_console = Console(stderr=True)
+_UPDATE_NOTICE_EMITTED = False
 
 
 def _format_language_breakdown(languages: dict[str, int]) -> str:
@@ -81,6 +84,32 @@ def _print_search_roi(summary: dict) -> None:
     console.print("[italic]You're in good hands.[/italic]")
 
 
+def _stdout_is_terminal() -> bool:
+    isatty = getattr(sys.stdout, "isatty", None)
+    return bool(callable(isatty) and isatty())
+
+
+def _maybe_print_update_notice(argv: list[str] | None = None, json_output: bool = False) -> None:
+    global _UPDATE_NOTICE_EMITTED
+    if _UPDATE_NOTICE_EMITTED or json_output or not _stdout_is_terminal():
+        return
+
+    notice = get_update_notice(argv)
+    if notice is None:
+        return
+
+    _UPDATE_NOTICE_EMITTED = True
+    console.print(
+        f"[bold yellow]Update available:[/bold yellow] SymDex "
+        f"{notice['latest_version']} (you have {notice['installed_version']})"
+    )
+    console.print(f"pip: [cyan]{notice['pip_command']}[/cyan]")
+    console.print(f"uv tool: [cyan]{notice['uv_tool_command']}[/cyan]")
+    console.print(f"uvx: [cyan]{notice['uvx_command']}[/cyan]")
+    console.print("[dim]Fewer tokens. More signal. Stay current.[/dim]")
+    console.print()
+
+
 def _search_roi_summary(repo: str, rows: list[dict], result_kind: str) -> dict | None:
     root = _repo_root(repo)
     if not root or not rows:
@@ -111,6 +140,7 @@ def index(
     ),
 ) -> None:
     """Index a folder and register it."""
+    _maybe_print_update_notice(sys.argv[1:])
     if not os.path.isdir(path):
         err_console.print(f"[red]Error:[/red] Path does not exist: {path}")
         raise typer.Exit(code=1)
@@ -136,6 +166,7 @@ def search(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Find functions/classes by name (omit --repo to search all indexed repos)."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if repo:
         conn = get_connection(get_db_path(repo))
         try:
@@ -178,6 +209,7 @@ def find(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Exact symbol name lookup by symbol name."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
@@ -215,6 +247,7 @@ def outline(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """List all symbols in a file."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     conn = get_connection(get_db_path(repo))
     try:
         symbols = query_file_symbols(conn, repo=repo, file=file)
@@ -244,6 +277,7 @@ def text(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Text search across indexed files."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
@@ -287,6 +321,7 @@ def semantic(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Semantic similarity search by meaning."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.search.semantic import search_semantic
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
@@ -336,6 +371,7 @@ def callers(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Show all functions that call the named function."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.graph.call_graph import get_callers as _get_callers
     conn = get_connection(get_db_path(repo))
     try:
@@ -364,6 +400,7 @@ def callees(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Show all functions called by the named function."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.graph.call_graph import get_callees as _get_callees
     conn = get_connection(get_db_path(repo))
     try:
@@ -389,6 +426,7 @@ def repos(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """List all indexed repositories."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     all_repos = query_repos()
     if not all_repos:
         err_console.print("[red]Error:[/red] No repos indexed yet.")
@@ -412,6 +450,7 @@ def invalidate(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Force re-index of a repo or specific file."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     count = _invalidate(repo, file=file)
     if json_output:
         typer.echo(json.dumps({"invalidated": count}))
@@ -426,6 +465,7 @@ def routes(
     path_contains: Optional[str] = typer.Option(None, "--path", "-p", help="Filter routes whose path contains this string."),
 ) -> None:
     """List HTTP routes indexed for a repo."""
+    _maybe_print_update_notice(sys.argv[1:])
     db_path = get_db_path(repo)
     conn = get_connection(db_path)
     try:
@@ -452,6 +492,7 @@ def serve(
     port: int = typer.Option(None, "--port", "-p", help="HTTP port (omit for stdio mode)"),
 ) -> None:
     """Start the MCP server."""
+    _maybe_print_update_notice(sys.argv[1:])
     from symdex.mcp.server import mcp
     if port:
         mcp.run(transport="streamable-http", port=port)
@@ -473,6 +514,7 @@ def watch(
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
 ) -> None:
     """Watch a directory and keep its index up to date automatically."""
+    _maybe_print_update_notice(sys.argv[1:])
     console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) — Ctrl+C to stop")
     try:
         _watch_repo(path, repo=repo, interval=interval)
@@ -485,6 +527,7 @@ def gc(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ) -> None:
     """Remove stale index databases for repos whose directories no longer exist."""
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     stale = get_stale_repos()
     removed = []
     for entry in stale:

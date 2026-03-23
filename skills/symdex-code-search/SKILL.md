@@ -11,15 +11,17 @@ description: |
 # SymDex Code Search
 
 Use SymDex before broad file browsing.
+Use it to save tokens by retrieving the exact code the agent needs instead of scanning whole files.
 
 ## Start Here
 
-1. Confirm the repo id.
-2. If the repo id is already known, pass `repo` on every scoped tool call.
-3. If the repo id is unknown, call `list_repos` and match the current worktree.
-4. Check freshness with `get_index_status(repo)`.
-5. If the current worktree is not indexed, call `index_folder(path=".")`.
-6. Reuse the returned `repo` id for the rest of the task.
+1. If the SymDex CLI reports a newer release, prefer upgrading before long sessions.
+2. Confirm the repo id.
+3. If the repo id is already known, pass `repo` on every scoped tool call.
+4. If the repo id is unknown, call `list_repos` and match the current worktree.
+5. Check freshness with `get_index_status(repo)`.
+6. If the current worktree is not indexed, call `index_folder(path=".")`.
+7. Reuse the returned `repo` id for the rest of the task.
 
 If SymDex is unavailable or indexing fails, say so clearly and fall back to normal file reads only as needed.
 
@@ -31,6 +33,7 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - Use call graph and route tools before manual tracing.
 - Re-check `get_index_status` after major edits or worktree switches.
 - Read full files only when editing, reviewing unsupported or generated content, or when SymDex cannot answer.
+- Optimize for lower-token retrieval, not broad context loading.
 
 ## Tool Selection
 
