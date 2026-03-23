@@ -47,6 +47,8 @@ def isolate(tmp_path, monkeypatch):
         except AttributeError:
             pass
 
+    monkeypatch.setenv("SYMDEX_DISABLE_UPDATE_CHECK", "1")
+
 
 @pytest.fixture
 def indexed_dir(tmp_path):
@@ -93,6 +95,46 @@ def test_search_found_table_output(indexed_dir):
     assert "alpha" in result.output.lower()
     assert "Without SymDex" in result.output
     assert "You're in good hands." in result.output
+
+
+def test_normal_command_prints_update_notice_when_newer_release_exists(indexed_dir, monkeypatch):
+    monkeypatch.delenv("SYMDEX_DISABLE_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr("symdex.cli._stdout_is_terminal", lambda: True)
+    monkeypatch.setattr(
+        "symdex.cli.get_update_notice",
+        lambda argv=None: {
+            "installed_version": "0.1.15",
+            "latest_version": "0.1.16",
+            "pip_command": "py -m pip install -U symdex",
+            "uv_tool_command": "uv tool upgrade symdex",
+            "uvx_command": "uvx symdex@latest repos",
+        },
+    )
+    monkeypatch.setattr("symdex.cli._UPDATE_NOTICE_EMITTED", False)
+
+    result = runner.invoke(app, ["repos"])
+
+    assert result.exit_code == 0
+    assert "Update available: SymDex 0.1.16" in result.output
+    assert "py -m pip install -U symdex" in result.output
+    assert "uv tool upgrade symdex" in result.output
+    assert "uvx symdex@latest repos" in result.output
+
+
+def test_json_output_suppresses_update_notice(indexed_dir, monkeypatch):
+    monkeypatch.delenv("SYMDEX_DISABLE_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr("symdex.cli._stdout_is_terminal", lambda: True)
+    monkeypatch.setattr(
+        "symdex.cli.get_update_notice",
+        lambda argv=None: pytest.fail("update notice should be skipped for --json"),
+    )
+    monkeypatch.setattr("symdex.cli._UPDATE_NOTICE_EMITTED", False)
+
+    result = runner.invoke(app, ["repos", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "repos" in data
 
 
 def test_search_found_json_output(indexed_dir):

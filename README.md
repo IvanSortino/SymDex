@@ -2,9 +2,9 @@
 
 # SymDex
 
-**Code intelligence MCP server for AI coding agents.**
+**Make AI coding agents stop burning whole files worth of tokens to find one thing.**
 
-*Index once. Find anything. Read only what you need.*
+*Index once. Find the exact symbol, route, or call path. Read only what you need.*
 
 <br>
 
@@ -46,6 +46,11 @@ uv tool install "symdex[local]"
 # Or run without installing
 uvx symdex --help
 
+# Upgrade an existing install
+py -m pip install -U symdex
+uv tool upgrade symdex
+uvx symdex@latest --help
+
 # Install the SymDex agent skill globally for supported agents
 npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --yes --global
 ```
@@ -56,6 +61,9 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 
 ## Why SymDex
 
+SymDex exists for one reason:
+- stop agents from reading whole files just to find one function
+
 SymDex pre-indexes a repository into:
 - a symbol table with byte offsets
 - semantic embeddings for intent search
@@ -63,11 +71,12 @@ SymDex pre-indexes a repository into:
 - extracted HTTP routes
 - a central repo registry in `~/.symdex`
 
-That lets an agent jump straight to the symbol or file slice it needs instead of reading entire files to find one function.
+That lets an agent jump straight to the exact symbol or file slice it needs, which means fewer blind file reads and materially lower token burn.
 
 Current main-branch highlights:
 - `symdex index` prints a code summary with files, Lines of Code, symbol counts, routes, skipped files, and language breakdown
 - `symdex search`, `find`, `text`, and `semantic` print approximate token-savings footers
+- normal CLI commands now show an upgrade notice when a newer SymDex release is available
 - `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
 - local `sentence-transformers` embeddings now live behind the optional `symdex[local]` extra
@@ -90,6 +99,7 @@ What it does:
 - uses SymDex before Read/Grep/Glob for discovery
 - prefers symbol-level and outline-level retrieval over full-file reads
 - guides agents toward callers, callees, routes, and semantic search when those are the better fit
+- keeps the workflow centered on lower-token code retrieval instead of broad file reads
 
 The skill lives in this repo at `skills/symdex-code-search/SKILL.md` and follows the standard `skills/<name>/SKILL.md` layout.
 
@@ -125,6 +135,7 @@ Notes:
 - If you omit `--repo` on `symdex index` or `symdex watch`, SymDex auto-generates a stable repo id from the current git branch and worktree path hash.
 - After indexing, SymDex prints a code summary.
 - After successful search commands, SymDex prints an approximate ROI footer with tokens read, tokens avoided, and tokens saved.
+- When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
 
 Add to your agent config:
 
