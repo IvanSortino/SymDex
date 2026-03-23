@@ -17,6 +17,7 @@ from symdex.core.watcher import watch as _watch_repo
 from symdex.core.storage import (
     get_connection,
     get_db_path,
+    get_registry_json_path,
     get_registry_path,  # noqa: F401 — imported for monkeypatching
     get_stale_repos,
     query_file_symbols,
@@ -31,10 +32,26 @@ from symdex.core.updates import get_update_notice
 from symdex.search.symbol_search import search_symbols as _search_symbols
 from symdex.search.semantic import search_semantic as _search_semantic
 
-app = typer.Typer(name="symdex", help="SymDex — universal code indexer")
+app = typer.Typer(name="symdex", help="SymDex - universal code indexer")
 console = Console()
 err_console = Console(stderr=True)
 _UPDATE_NOTICE_EMITTED = False
+
+
+def _apply_state_dir_override(state_dir: Optional[str]) -> None:
+    if state_dir:
+        os.environ["SYMDEX_STATE_DIR"] = state_dir
+
+
+@app.callback()
+def main(
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+) -> None:
+    _apply_state_dir_override(state_dir)
 
 
 def _format_language_breakdown(languages: dict[str, int]) -> str:
@@ -155,6 +172,8 @@ def index(
     console.print(table)
     console.print()
     _print_code_summary(result.summary)
+    console.print(f"[dim]Registry DB:[/dim] {get_registry_path()}")
+    console.print(f"[dim]Registry JSON:[/dim] {get_registry_json_path()}")
 
 
 @app.command()
@@ -432,7 +451,11 @@ def repos(
         err_console.print("[red]Error:[/red] No repos indexed yet.")
         raise typer.Exit(code=1)
     if json_output:
-        typer.echo(json.dumps({"repos": all_repos}))
+        typer.echo(json.dumps({
+            "repos": all_repos,
+            "registry_db": get_registry_path(),
+            "registry_json": get_registry_json_path(),
+        }))
         return
     table = Table(title="Indexed Repositories")
     table.add_column("Name", style="cyan")
@@ -441,6 +464,8 @@ def repos(
     for r in all_repos:
         table.add_row(r["name"], r["root_path"], str(r.get("last_indexed", "")))
     console.print(table)
+    console.print(f"[dim]Registry DB:[/dim] {get_registry_path()}")
+    console.print(f"[dim]Registry JSON:[/dim] {get_registry_json_path()}")
 
 
 @app.command()

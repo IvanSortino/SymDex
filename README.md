@@ -75,7 +75,7 @@ SymDex pre-indexes a repository into:
 - semantic embeddings for intent search
 - a call graph
 - extracted HTTP routes
-- a central repo registry in `~/.symdex`
+- a registry in the active SymDex state directory (`~/.symdex` by default or workspace-local `./.symdex`)
 
 That lets an agent jump straight to the exact symbol or file slice it needs, which means fewer blind file reads and materially lower token burn.
 
@@ -89,6 +89,7 @@ Current main-branch highlights:
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
 - local `sentence-transformers` embeddings now live behind the optional `symdex[local]` extra
 - Voyage AI is available as an optional embedding backend, including optional multimodal asset indexing
+- optional workspace-local state keeps repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces
 
 ---
 
@@ -144,6 +145,7 @@ Notes:
 - After indexing, SymDex prints a code summary.
 - After successful search commands, SymDex prints an approximate ROI footer with tokens read, tokens avoided, and tokens saved.
 - When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
+- Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
 
 Add to your agent config:
 
@@ -172,6 +174,28 @@ HTTP mode:
 
 ---
 
+## Workspace-local state and Docker
+
+SymDex still defaults to `~/.symdex`, but it now also supports a workspace-local state directory for portable and containerized workflows.
+
+Use it like this on first setup:
+
+```bash
+SYMDEX_STATE_DIR=.symdex symdex index ./myproject --repo myproject
+```
+
+That creates:
+
+- `./.symdex/<repo>.db`
+- `./.symdex/registry.db`
+- `./.symdex/registry.json`
+
+`registry.json` is the human-readable manifest. In workspace-local mode it stores relative `root_path` and `db_path` values, so you can inspect what is indexed without opening SQLite.
+
+After the local state exists, SymDex auto-discovers it from the current workspace or any nested subdirectory.
+
+---
+
 ## What you get
 
 <p align="center">
@@ -190,6 +214,7 @@ HTTP mode:
 | HTTP routes | Extract Flask, FastAPI, Django, Express, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix routes |
 | Auto-watch | Re-index on change and keep the index fresh |
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
+| Workspace-local state | Keep repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces |
 | Search ROI footer | Approximate token savings after successful search commands |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
 | Optional embedding backends | Add `symdex[local]` for local embeddings or `symdex[voyage]` for hosted embeddings only when needed |
@@ -378,7 +403,7 @@ Notes:
 ## FAQ
 
 **Where are indexes stored?**
-Each repo gets its own SQLite database under `~/.symdex`, plus a central registry database.
+By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. If you set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...`, SymDex keeps repo databases, `registry.db`, and `registry.json` inside the current workspace instead.
 
 **What does indexing print now?**
 A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.

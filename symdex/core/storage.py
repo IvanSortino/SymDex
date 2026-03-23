@@ -2,7 +2,9 @@
 # This file is part of SymDex.
 # License: See LICENSE file in the project root.
 
+import datetime
 import fnmatch
+import json
 import os
 import sqlite3
 import pathlib
@@ -10,6 +12,8 @@ from typing import Optional
 
 import numpy as np
 import sqlite_vec
+
+from symdex.core.state import get_state_paths, resolve_registry_value, serialize_registry_value
 
 DEFAULT_SYMBOL_LIMIT = 20
 
@@ -221,17 +225,47 @@ def search_text_in_index(
 
 
 def get_db_path(repo_name: str) -> str:
-    """Return path to ~/.symdex/<repo_name>.db — repo_name is normalized to lowercase."""
-    base = os.path.join(os.path.expanduser("~"), ".symdex")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, f"{repo_name.lower()}.db")
+    """Return path to the active state directory's repo database."""
+    state = get_state_paths()
+    os.makedirs(state.base_dir, exist_ok=True)
+    return os.path.join(state.base_dir, f"{repo_name.lower()}.db")
 
 
 def get_registry_path() -> str:
-    """Return path to the central registry: ~/.symdex/registry.db"""
-    base = os.path.join(os.path.expanduser("~"), ".symdex")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, "registry.db")
+    """Return path to the active state directory's registry database."""
+    state = get_state_paths()
+    os.makedirs(state.base_dir, exist_ok=True)
+    return state.registry_db_path
+
+
+def get_registry_json_path() -> str:
+    """Return path to the human-readable registry manifest."""
+    return os.path.join(os.path.dirname(get_registry_path()), "registry.json")
+
+
+def _current_timestamp() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _normalize_repo_row(row: dict, resolve_paths: bool = True) -> dict:
+    if not resolve_paths:
+        return dict(row)
+    state = get_state_paths()
+    normalized = dict(row)
+    normalized["root_path"] = resolve_registry_value(normalized["root_path"], state)
+    normalized["db_path"] = resolve_registry_value(normalized["db_path"], state)
+    return normalized
+
+
+def _write_registry_manifest(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        "SELECT name, root_path, db_path, last_indexed FROM repos ORDER BY name"
+    ).fetchall()
+    manifest_path = get_registry_json_path()
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    with open(manifest_path, "w", encoding="utf-8") as fh:
+        json.dump([dict(row) for row in rows], fh, indent=2)
+        fh.write("\n")
 
 
 def _get_registry_connection() -> sqlite3.Connection:
@@ -254,61 +288,61 @@ def _get_registry_connection() -> sqlite3.Connection:
 
 
 def upsert_repo(name: str, root_path: str, db_path: str) -> None:
-    """Register or update a repo in the central registry."""
+    """Register or update a repo in the active registry."""
     name = name.lower()
+    state = get_state_paths()
+    stored_root = serialize_registry_value(root_path, state)
+    stored_db = serialize_registry_value(db_path, state)
+    timestamp = _current_timestamp()
     conn = _get_registry_connection()
     try:
         conn.execute(
             """
             INSERT INTO repos (name, root_path, db_path, last_indexed)
-            VALUES (?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 root_path    = excluded.root_path,
                 db_path      = excluded.db_path,
                 last_indexed = excluded.last_indexed
             """,
-            (name, root_path, db_path),
+            (name, stored_root, stored_db, timestamp),
         )
         conn.commit()
+        _write_registry_manifest(conn)
     finally:
         conn.close()
 
 
-def query_repos() -> list[dict]:
-    """Return all registered repos from the central registry, ordered by name."""
+def query_repos(resolve_paths: bool = True) -> list[dict]:
+    """Return all registered repos from the active registry, ordered by name."""
     conn = _get_registry_connection()
     try:
         rows = conn.execute(
             "SELECT name, root_path, db_path, last_indexed FROM repos ORDER BY name"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [_normalize_repo_row(dict(r), resolve_paths=resolve_paths) for r in rows]
     finally:
         conn.close()
 
 
 def get_stale_repos() -> list[dict]:
-    """Return registry entries whose root_path no longer exists on disk."""
-    conn = _get_registry_connection()
-    try:
-        rows = conn.execute(
-            "SELECT name, root_path, db_path FROM repos ORDER BY name"
-        ).fetchall()
-        return [dict(r) for r in rows if not os.path.isdir(r["root_path"])]
-    finally:
-        conn.close()
+    """Return registry entries whose resolved root_path no longer exists on disk."""
+    return [row for row in query_repos() if not os.path.isdir(row["root_path"])]
 
 
 def remove_repo(name: str) -> None:
     """Delete a repo's registry entry and its .db file."""
+    state = get_state_paths()
     conn = _get_registry_connection()
     try:
         row = conn.execute(
-            "SELECT db_path FROM repos WHERE name=?", (name,)
+            "SELECT db_path FROM repos WHERE name=?", (name.lower(),)
         ).fetchone()
         if row:
-            db_path = row["db_path"]
-            conn.execute("DELETE FROM repos WHERE name=?", (name,))
+            db_path = resolve_registry_value(row["db_path"], state)
+            conn.execute("DELETE FROM repos WHERE name=?", (name.lower(),))
             conn.commit()
+            _write_registry_manifest(conn)
             if os.path.isfile(db_path):
                 os.remove(db_path)
     finally:
@@ -512,17 +546,11 @@ def get_index_status(repo: str, db_path: str) -> dict:
             )
             last_indexed_timestamp = last_indexed_dt_utc.timestamp()
 
-            # Get root_path from registry
+            # Get resolved root_path from the active registry
             root_path = None
-            registry_conn = _get_registry_connection()
-            try:
-                reg_row = registry_conn.execute(
-                    "SELECT root_path FROM repos WHERE name=?", (repo,)
-                ).fetchone()
-                if reg_row:
-                    root_path = reg_row["root_path"]
-            finally:
-                registry_conn.close()
+            repo_entry = next((row for row in query_repos() if row["name"] == repo), None)
+            if repo_entry:
+                root_path = repo_entry["root_path"]
 
             if root_path:
                 # Check all indexed files

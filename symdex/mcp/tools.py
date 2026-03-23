@@ -9,6 +9,7 @@ from symdex.core.storage import (
     get_connection,
     get_db_path,
     get_index_status,
+    get_registry_json_path,
     get_registry_path,  # noqa: F401 — imported so tests can monkeypatch this module's reference
     get_repo_summary,
     get_repo_stats,
@@ -67,6 +68,8 @@ def index_folder_tool(path: str, repo: str | None = None, name: str | None = Non
         "indexed": result.indexed_count,
         "skipped": result.skipped_count,
         "summary": result.summary,
+        "registry_db": get_registry_path(),
+        "registry_json": get_registry_json_path(),
     }
 
 
@@ -219,7 +222,9 @@ def list_repos_tool() -> dict:
                 "last_indexed": r["last_indexed"],
             }
             for r in repos
-        ]
+        ],
+        "registry_db": get_registry_path(),
+        "registry_json": get_registry_json_path(),
     }
 
 
@@ -250,6 +255,8 @@ def index_repo_tool(path: str, repo: str | None = None, name: str | None = None)
         "indexed": result.indexed_count,
         "skipped": result.skipped_count,
         "summary": result.summary,
+        "registry_db": get_registry_path(),
+        "registry_json": get_registry_json_path(),
     }
 
 
