@@ -3,6 +3,7 @@
 # License: See LICENSE file in the project root.
 
 import json
+import importlib.metadata
 import os
 import sys
 from typing import Optional
@@ -43,12 +44,26 @@ def _apply_state_dir_override(state_dir: Optional[str]) -> None:
         os.environ["SYMDEX_STATE_DIR"] = state_dir
 
 
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    typer.echo(importlib.metadata.version("symdex"))
+    raise typer.Exit()
+
+
 @app.callback()
 def main(
     state_dir: Optional[str] = typer.Option(
         None,
         "--state-dir",
         help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show SymDex version and exit.",
     ),
 ) -> None:
     _apply_state_dir_override(state_dir)
@@ -85,6 +100,29 @@ def _repo_root(repo: str) -> str | None:
         if entry["name"] == repo:
             return entry["root_path"]
     return None
+
+
+def _repo_entry(repo: str) -> dict | None:
+    for entry in query_repos():
+        if entry["name"] == repo:
+            return entry
+    return None
+
+
+def _require_indexed_repo(repo: str) -> dict:
+    entry = _repo_entry(repo)
+    if entry is None:
+        err_console.print(f"[red]Error:[/red] Repo not indexed: {repo}")
+        raise typer.Exit(code=1)
+    return entry
+
+
+def _repo_has_semantic_embeddings(conn, repo: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM symbols WHERE repo = ? AND embedding IS NOT NULL LIMIT 1",
+        (repo,),
+    ).fetchone()
+    return row is not None
 
 
 def _print_search_roi(summary: dict) -> None:
@@ -162,8 +200,14 @@ def index(
         "-n",
         help="Repo name (omit to auto-generate from git branch and path hash)",
     ),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Index a folder and register it."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:])
     if not os.path.isdir(path):
         err_console.print(f"[red]Error:[/red] Path does not exist: {path}")
@@ -190,10 +234,17 @@ def search(
     kind: str = typer.Option(None, "--kind", "-k", help="Symbol kind filter"),
     limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Find functions/classes by name (omit --repo to search all indexed repos)."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if repo:
+        _require_indexed_repo(repo)
         conn = get_connection(get_db_path(repo))
         try:
             symbols = _search_symbols(conn, repo=repo, query=query, kind=kind, limit=limit)
@@ -232,12 +283,19 @@ def find(
     name: str = typer.Argument(..., help="Exact symbol name"),
     repo: str = typer.Option(None, "--repo", "-r", help="Repo name"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Exact symbol name lookup by symbol name."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
+    _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
         symbols = _search_symbols(conn, repo=repo, query=name, limit=1)
@@ -269,9 +327,16 @@ def outline(
     file: str = typer.Argument(..., help="Relative file path within repo"),
     repo: str = typer.Option(..., "--repo", "-r", help="Repo name"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """List all symbols in a file."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
+    _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
         symbols = query_file_symbols(conn, repo=repo, file=file)
@@ -299,17 +364,19 @@ def text(
     repo: str = typer.Option(None, "--repo", "-r", help="Repo name"),
     pattern: str = typer.Option(None, "--pattern", "-p", help="File glob pattern"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Text search across indexed files."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
-    all_repos = query_repos()
-    repo_info = next((r for r in all_repos if r["name"] == repo), None)
-    if repo_info is None:
-        err_console.print(f"[red]Error:[/red] Repo not indexed: {repo}")
-        raise typer.Exit(code=1)
+    repo_info = _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
         matches = search_text_in_index(conn, repo=repo, query=query, repo_root=repo_info["root_path"], file_pattern=pattern)
@@ -342,15 +409,30 @@ def semantic(
     repo: str = typer.Option(None, "--repo", "-r", help="Repo name"),
     limit: int = typer.Option(10, "--limit", "-l", help="Max results"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Semantic similarity search by meaning."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.search.semantic import search_semantic
     if not repo:
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
+    _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
+        if not _repo_has_semantic_embeddings(conn, repo):
+            err_console.print(
+                "[red]Error:[/red] "
+                f"Repo has no semantic embeddings: {repo}. "
+                'Re-index after installing `symdex[local]` or enabling '
+                "`SYMDEX_EMBED_BACKEND=voyage`."
+            )
+            raise typer.Exit(code=1)
         try:
             results = _search_semantic(
                 conn,
@@ -391,10 +473,17 @@ def callers(
     name: str = typer.Argument(..., help="Function name to find callers of"),
     repo: str = typer.Option(..., "--repo", "-r", help="Repo name"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Show all functions that call the named function."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.graph.call_graph import get_callers as _get_callers
+    _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
         results = _get_callers(conn, name=name, repo=repo)
@@ -420,10 +509,17 @@ def callees(
     name: str = typer.Argument(..., help="Function name to find callees of"),
     repo: str = typer.Option(..., "--repo", "-r", help="Repo name"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Show all functions called by the named function."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     from symdex.graph.call_graph import get_callees as _get_callees
+    _require_indexed_repo(repo)
     conn = get_connection(get_db_path(repo))
     try:
         results = _get_callees(conn, name=name, repo=repo)
@@ -446,8 +542,14 @@ def callees(
 @app.command()
 def repos(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """List all indexed repositories."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     all_repos = query_repos()
     if not all_repos:
@@ -476,9 +578,16 @@ def invalidate(
     repo: str = typer.Option(..., "--repo", "-r", help="Repo name"),
     file: str = typer.Option(None, "--file", "-f", help="Specific file to invalidate"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Force re-index of a repo or specific file."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
+    _require_indexed_repo(repo)
     count = _invalidate(repo, file=file)
     if json_output:
         typer.echo(json.dumps({"invalidated": count}))
@@ -491,9 +600,16 @@ def routes(
     repo: str = typer.Argument(..., help="Repo name to query routes for."),
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Filter by HTTP method (GET, POST, ...)."),
     path_contains: Optional[str] = typer.Option(None, "--path", "-p", help="Filter routes whose path contains this string."),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """List HTTP routes indexed for a repo."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:])
+    _require_indexed_repo(repo)
     db_path = get_db_path(repo)
     conn = get_connection(db_path)
     try:
@@ -505,7 +621,7 @@ def routes(
         console.print(f"[yellow]No routes indexed for repo '{repo}'.[/yellow]")
         return
 
-    table = Table(title=f"Routes — {repo}", show_header=True, header_style="bold")
+    table = Table(title=f"Routes - {repo}", show_header=True, header_style="bold")
     table.add_column("Method", style="cyan", width=8)
     table.add_column("Path")
     table.add_column("Handler")
@@ -518,8 +634,14 @@ def routes(
 @app.command()
 def serve(
     port: int = typer.Option(None, "--port", "-p", help="HTTP port (omit for stdio mode)"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Start the MCP server."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:])
     from symdex.mcp.server import mcp
     if port:
@@ -540,10 +662,16 @@ def watch(
         help="Repo name (omit to auto-generate from git branch and path hash)",
     ),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Watch a directory and keep its index up to date automatically."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:])
-    console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) — Ctrl+C to stop")
+    console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) - Ctrl+C to stop")
     try:
         _watch_repo(path, repo=repo, interval=interval)
     except KeyboardInterrupt:
@@ -553,8 +681,14 @@ def watch(
 @app.command()
 def gc(
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
 ) -> None:
     """Remove stale index databases for repos whose directories no longer exist."""
+    _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
     stale = get_stale_repos()
     removed = []
@@ -565,11 +699,66 @@ def gc(
         typer.echo(json.dumps({"removed": removed, "count": len(removed)}))
         return
     if not removed:
-        console.print("Registry is clean — nothing to remove.")
+        console.print("Registry is clean - nothing to remove.")
         return
     for name in removed:
         console.print(f"Removed stale index: [cyan]{name}[/cyan]")
     console.print(f"[green]{len(removed)}[/green] stale index(es) removed.")
+
+
+@app.command("index-folder", hidden=True)
+def index_folder_alias(
+    path: str = typer.Argument(..., help="Directory to index"),
+    repo: str = typer.Option(
+        None,
+        "--repo",
+        "--name",
+        "-r",
+        "-n",
+        help="Repo name (omit to auto-generate from git branch and path hash)",
+    ),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+) -> None:
+    """Compatibility alias for MCP-style shell usage."""
+    index(path=path, repo=repo, state_dir=state_dir)
+
+
+@app.command("index-repo", hidden=True)
+def index_repo_alias(
+    path: str = typer.Argument(..., help="Directory to index"),
+    repo: str = typer.Option(
+        None,
+        "--repo",
+        "--name",
+        "-r",
+        "-n",
+        help="Repo name (omit to auto-generate from git branch and path hash)",
+    ),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+) -> None:
+    """Compatibility alias for MCP-style shell usage."""
+    index(path=path, repo=repo, state_dir=state_dir)
+
+
+@app.command("list-repos", hidden=True)
+def list_repos_alias(
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+) -> None:
+    """Compatibility alias for MCP-style shell usage."""
+    repos(json_output=json_output, state_dir=state_dir)
 
 
 if __name__ == "__main__":

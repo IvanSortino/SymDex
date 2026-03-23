@@ -148,6 +148,9 @@ Notes:
 - After successful search commands, SymDex prints an approximate ROI footer with tokens read, tokens avoided, and tokens saved.
 - When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
 - Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
+- `--state-dir` can be passed either globally or after the subcommand, for example `symdex --state-dir .symdex repos` or `symdex repos --state-dir .symdex`.
+- Canonical CLI commands are `index` and `repos`. Shell compatibility aliases now also accept MCP-shaped names like `index-folder`, `index-repo`, and `list-repos`.
+- Semantic search requires stored embeddings. If a repo was indexed before `symdex[local]` or Voyage was enabled, re-index it after enabling the backend you want.
 
 Add to your agent config:
 
@@ -419,11 +422,17 @@ Yes. Normal human-facing CLI commands can print a brief upgrade notice with exac
 **Does semantic search require the internet?**
 Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.
 
+**Why does `symdex semantic` say my repo has no semantic embeddings?**
+That repo was indexed without an embedding backend. Install `symdex[local]` for local embeddings or enable Voyage, then re-index the repo so embeddings are written into the index.
+
 **Can I install SymDex without sentence-transformers?**
 Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph features without the local embedding dependencies. Install `symdex[local]` only when you want local semantic search.
 
 **Can I use SymDex on multiple repos and worktrees?**
 Yes. SymDex maintains a central registry, supports explicit `--repo` names, and can auto-generate stable repo ids from the current branch and worktree path when you omit `--repo`.
+
+**Why do some agent logs show `index-folder` or `list-repos` while the CLI docs say `index` and `repos`?**
+`index_folder` and `list_repos` are MCP tool names. The canonical shell commands are `symdex index` and `symdex repos`, but SymDex now also accepts compatibility aliases such as `symdex index-folder` and `symdex list-repos`.
 
 **What happens when I delete a worktree or repo?**
 Run `symdex gc` or call `gc_stale_indexes` through MCP. SymDex removes stale registry entries and their database files.

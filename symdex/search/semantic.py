@@ -303,11 +303,12 @@ def search_semantic(
     """Cosine similarity search over stored embeddings."""
     from symdex.core.storage import query_symbols_with_embeddings
 
-    query_vec = embed_for_query(query, progress_callback=progress_callback)
     rows = query_symbols_with_embeddings(conn, repo=repo)
 
     if not rows:
         return []
+
+    query_vec = embed_for_query(query, progress_callback=progress_callback)
 
     results = []
     for row in rows:

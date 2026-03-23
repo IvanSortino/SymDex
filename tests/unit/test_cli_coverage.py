@@ -7,6 +7,7 @@
 
 import json
 import os
+import importlib.metadata
 import pytest
 import sys
 from typer.testing import CliRunner
@@ -178,6 +179,30 @@ def test_index_name_alias_still_works(tmp_path):
     assert "legacy_repo" in result.output
 
 
+def test_index_accepts_state_dir_after_subcommand(tmp_path):
+    src = tmp_path / "stateafterindex"
+    src.mkdir()
+    (src / "module.py").write_text("def state_after_index():\n    return 1\n")
+    result = runner.invoke(app, ["index", str(src), "--repo", "state_repo", "--state-dir", ".symdex"])
+    assert result.exit_code == 0
+    assert os.environ.get("SYMDEX_STATE_DIR") == ".symdex"
+
+
+def test_index_folder_alias_works(tmp_path):
+    src = tmp_path / "aliasindex"
+    src.mkdir()
+    (src / "module.py").write_text("def alias_index():\n    return 1\n")
+    result = runner.invoke(app, ["index-folder", str(src), "--repo", "alias_repo"])
+    assert result.exit_code == 0
+    assert "alias_repo" in result.output
+
+
+def test_index_help_shows_state_dir():
+    result = runner.invoke(app, ["index", "--help"])
+    assert result.exit_code == 0
+    assert "--state-dir" in result.output
+
+
 # ── find command ──────────────────────────────────────────────────────────────
 
 def test_find_no_repo_exits_1():
@@ -278,6 +303,24 @@ def test_repos_json_output(indexed_dir):
     assert "repos" in data
 
 
+def test_repos_accepts_state_dir_after_subcommand(indexed_dir):
+    result = runner.invoke(app, ["repos", "--state-dir", ".symdex"])
+    assert result.exit_code == 0
+    assert "cov_repo" in result.output
+
+
+def test_list_repos_alias_works(indexed_dir):
+    result = runner.invoke(app, ["list-repos"])
+    assert result.exit_code == 0
+    assert "cov_repo" in result.output
+
+
+def test_repos_help_shows_state_dir():
+    result = runner.invoke(app, ["repos", "--help"])
+    assert result.exit_code == 0
+    assert "--state-dir" in result.output
+
+
 # ── invalidate command ────────────────────────────────────────────────────────
 
 def test_invalidate_full_repo_json(indexed_dir):
@@ -315,6 +358,12 @@ def test_semantic_no_repo_exits_1():
     assert result.exit_code == 1
 
 
+def test_semantic_repo_not_indexed_exits_1():
+    result = runner.invoke(app, ["semantic", "some query", "--repo", "missing_repo"])
+    assert result.exit_code == 1
+    assert "Repo not indexed: missing_repo" in result.output
+
+
 def test_semantic_missing_local_extra_exits_1(indexed_dir, monkeypatch):
     monkeypatch.delenv("SYMDEX_EMBED_BACKEND", raising=False)
     monkeypatch.setitem(sys.modules, "sentence_transformers", None)
@@ -323,3 +372,25 @@ def test_semantic_missing_local_extra_exits_1(indexed_dir, monkeypatch):
 
     assert result.exit_code == 1
     assert 'symdex[local]' in result.output
+
+
+def test_semantic_no_embeddings_gives_actionable_error(indexed_dir, monkeypatch):
+    monkeypatch.setattr("symdex.cli._repo_has_semantic_embeddings", lambda conn, repo: False)
+
+    result = runner.invoke(app, ["semantic", "some query", "--repo", indexed_dir["repo"]])
+
+    assert result.exit_code == 1
+    assert "Repo has no semantic embeddings" in result.output
+    assert "symdex[local]" in result.output
+
+
+def test_version_flag_prints_package_version():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert importlib.metadata.version("symdex") in result.output
+
+
+def test_root_help_shows_version():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "--version" in result.output
