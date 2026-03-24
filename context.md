@@ -2,8 +2,8 @@
 
 ## Current Snapshot
 
-- Version at this checkout: `0.1.20`
-- Git tag at this checkout: `v0.1.20`
+- Version at this checkout: `0.1.21`
+- Git tag at this checkout: `v0.1.21`
 - Exact Git HEAD varies by checkout. Verify locally with `git rev-parse HEAD` when you need the precise commit.
 - Product status: active and productized
 - Primary positioning: repo-local codebase oracle for AI coding agents

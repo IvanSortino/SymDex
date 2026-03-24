@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "symdex"
-version = "0.1.20"
+version = "0.1.21"
 description = "Repo-local code intelligence for AI coding agents - symbols, semantic search, call graphs, routes, and token savings"
 authors = [{name = "Muhammad Husnain"}]
 license = {text = "MIT"}

@@ -7,8 +7,8 @@ It indexes source code into a fast local SQLite-backed retrieval layer so agents
 
 ## Current Product State
 
-- Current version: `0.1.20`
-- Release tag at this checkout: `v0.1.20`
+- Current version: `0.1.21`
+- Release tag at this checkout: `v0.1.21`
 - Delivery surfaces: CLI, stdio MCP server, streamable HTTP MCP server
 - Current MCP tool count: 20
 - Supported language surfaces: 16
