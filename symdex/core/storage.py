@@ -326,8 +326,14 @@ def query_repos(resolve_paths: bool = True) -> list[dict]:
 
 
 def get_stale_repos() -> list[dict]:
-    """Return registry entries whose resolved root_path no longer exists on disk."""
-    return [row for row in query_repos() if not os.path.isdir(row["root_path"])]
+    """Return registry entries whose root_path or db_path are gone."""
+    stale = []
+    for row in query_repos():
+        root_missing = not os.path.isdir(row["root_path"])
+        db_missing = not os.path.isfile(row["db_path"])
+        if root_missing or db_missing:
+            stale.append(row)
+    return stale
 
 
 def remove_repo(name: str) -> None:
