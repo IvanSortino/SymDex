@@ -32,6 +32,8 @@ _SUPPORTED_EXTS = {
     ".kts",
     ".dart",
     ".swift",
+    ".r",
+    ".R",
 }
 _DART_CALL_RE = re.compile(r"([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(")
 
