@@ -332,3 +332,102 @@ def test_parse_vue_file_field_is_vue_extension(vue_js_file):
     symbols = parse_file(path, root)
     for s in symbols:
         assert s["file"].endswith(".vue")
+
+
+# ---------------------------------------------------------------------------
+# R language tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def r_file(tmp_path):
+    f = tmp_path / "sample.R"
+    f.write_text(
+        "#' Add two numbers\n"
+        "add <- function(x, y = 0) {\n"
+        "  return(x + y)\n"
+        "}\n"
+        "\n"
+        "multiply <- function(a, b) a * b\n"
+        "\n"
+        "threshold <- 42\n"
+        "\n"
+        "library(dplyr)\n"
+        'require("ggplot2")\n',
+        encoding="utf-8",
+    )
+    return str(f), str(tmp_path)
+
+
+def test_r_function_extraction(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    funcs = [s for s in symbols if s["kind"] == "function"]
+    names = {f["name"] for f in funcs}
+    assert "add" in names
+    assert "multiply" in names
+
+
+def test_r_function_signature(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    add = next(s for s in symbols if s["name"] == "add")
+    assert "function" in add["signature"]
+
+
+def test_r_function_docstring(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    add = next(s for s in symbols if s["name"] == "add")
+    assert add["docstring"] is not None
+    assert "Add two numbers" in add["docstring"]
+
+
+def test_r_variable_extraction(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    variables = [s for s in symbols if s["kind"] == "variable"]
+    assert any(v["name"] == "threshold" for v in variables)
+
+
+def test_r_import_extraction(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    imports = [s for s in symbols if s["kind"] == "import"]
+    names = {i["name"] for i in imports}
+    assert "dplyr" in names
+    assert "ggplot2" in names
+
+
+@pytest.fixture
+def r_class_file(tmp_path):
+    f = tmp_path / "classes.R"
+    f.write_text(
+        "library(R6)\n"
+        "Animal <- R6Class(\n"
+        '  classname = "Animal",\n'
+        "  public = list(\n"
+        "    name = NULL,\n"
+        "    speak = function() cat(self$name)\n"
+        "  )\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    return str(f), str(tmp_path)
+
+
+def test_r_r6class_extraction(r_class_file):
+    path, root = r_class_file
+    symbols = parse_file(path, root)
+    classes = [s for s in symbols if s["kind"] == "class"]
+    assert any(c["name"] == "Animal" for c in classes)
+
+
+def test_r_byte_offsets_valid(r_file):
+    path, root = r_file
+    symbols = parse_file(path, root)
+    with open(path, "rb") as fh:
+        src = fh.read()
+    for s in symbols:
+        assert 0 <= s["start_byte"] < len(src)
+        assert s["end_byte"] <= len(src)
+        assert s["end_byte"] > s["start_byte"]

@@ -26,6 +26,7 @@ LANGUAGE_SAMPLES: dict[str, str] = {
     ".ex": "defmodule ExModule do\n  def alpha(), do: 1\nend\n",
     ".exs": "defmodule ExsModule do\n  defp alpha(), do: 1\nend\n",
     ".rb": "class RbClass\nend\ndef alpha\nend\n",
+    ".r": "my_func <- function(x, y = 10) {\n  return(x + y)\n}\nx <- 42\n",
 }
 
 

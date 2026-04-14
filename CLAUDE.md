@@ -8,7 +8,7 @@ SymDex is a repo-local codebase oracle for AI coding agents, delivered as a CLI 
 - Current version at this checkout: `0.1.19`
 - Current tag at this checkout: `v0.1.19`
 - Current MCP tool count: 20
-- Current language surfaces: 16
+- Current language surfaces: 17
 - Default state directory: `~/.symdex`
 - Optional workspace-local state directory: `./.symdex`
 

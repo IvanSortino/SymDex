@@ -47,6 +47,8 @@ _EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".kts":  ("kotlin",     "tree_sitter_kotlin", None),
     ".dart": ("dart",       None, None),
     ".swift": ("swift",     None, None),
+    ".r":    ("r",          None, None),
+    ".R":    ("r",          None, None),
 }
 # node_type → kind mapping per language
 _NODE_KINDS: dict[str, dict[str, str]] = {
@@ -136,6 +138,8 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
         "protocol_declaration": "class",
         "protocol_function_declaration": "method",
     },
+    # R symbols are extracted via custom binary_operator logic in _walk_and_extract
+    "r": {},
 }
 
 
@@ -492,6 +496,77 @@ def _walk_and_extract(
                     "signature": _extract_signature(node, source_bytes),
                     "docstring": _extract_comment_docstring(node, source_bytes),
                 })
+            stack.extend(reversed(node.children))
+            continue
+
+        # R: name <- function(...) {}  /  name <- value  /  R6Class / setClass
+        if lang_name == "r" and node_type == "binary_operator":
+            children = node.children
+            if len(children) >= 3:
+                lhs, op, rhs = children[0], children[1], children[2]
+                op_text = source_bytes[op.start_byte:op.end_byte].decode("utf-8", errors="replace")
+                if lhs.type == "identifier" and op_text in ("<-", "=", "<<-", ":="):
+                    name = source_bytes[lhs.start_byte:lhs.end_byte].decode("utf-8", errors="replace")
+                    if rhs.type == "function_definition":
+                        results.append({
+                            "name": name,
+                            "file": rel_path,
+                            "kind": "function",
+                            "start_byte": node.start_byte,
+                            "end_byte": node.end_byte,
+                            "signature": _extract_signature(node, source_bytes),
+                            "docstring": _extract_comment_docstring(node, source_bytes),
+                        })
+                    elif rhs.type == "call":
+                        func_node = rhs.child_by_field_name("function")
+                        if func_node and func_node.type == "identifier":
+                            fn = source_bytes[func_node.start_byte:func_node.end_byte].decode("utf-8", errors="replace")
+                            if fn in ("R6Class", "setClass", "setRefClass"):
+                                results.append({
+                                    "name": name,
+                                    "file": rel_path,
+                                    "kind": "class",
+                                    "start_byte": node.start_byte,
+                                    "end_byte": node.end_byte,
+                                    "signature": _extract_signature(node, source_bytes),
+                                    "docstring": _extract_comment_docstring(node, source_bytes),
+                                })
+                    else:
+                        # top-level variable: parent is root program node
+                        if node.parent is not None and node.parent.parent is None:
+                            results.append({
+                                "name": name,
+                                "file": rel_path,
+                                "kind": "variable",
+                                "start_byte": node.start_byte,
+                                "end_byte": node.end_byte,
+                                "signature": _extract_signature(node, source_bytes),
+                                "docstring": None,
+                            })
+            stack.extend(reversed(node.children))
+            continue
+
+        # R: library("pkg") / require(pkg)
+        if lang_name == "r" and node_type == "call":
+            func_node = node.child_by_field_name("function")
+            if func_node and func_node.type == "identifier":
+                fn = source_bytes[func_node.start_byte:func_node.end_byte].decode("utf-8", errors="replace")
+                if fn in ("library", "require"):
+                    args = node.child_by_field_name("arguments")
+                    if args:
+                        pkg_node = next((c for c in args.children if c.is_named), None)
+                        if pkg_node:
+                            pkg = source_bytes[pkg_node.start_byte:pkg_node.end_byte].decode("utf-8", errors="replace").strip("\"'")
+                            if pkg:
+                                results.append({
+                                    "name": pkg,
+                                    "file": rel_path,
+                                    "kind": "import",
+                                    "start_byte": node.start_byte,
+                                    "end_byte": node.end_byte,
+                                    "signature": _extract_signature(node, source_bytes),
+                                    "docstring": None,
+                                })
             stack.extend(reversed(node.children))
             continue
 
