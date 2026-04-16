@@ -57,6 +57,9 @@ jobs:
         id: meta
         run: python scripts/release/validate_metadata.py --pyproject pyproject.toml --github-output "$GITHUB_OUTPUT"
 
+      - name: Guard tracked Markdown
+        run: python scripts/release/guard_markdown.py --repo-root .
+
       - name: Clean previous build artifacts
         run: rm -rf dist build *.egg-info
 

@@ -43,6 +43,9 @@ jobs:
             --tag "${{ github.ref_name }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      - name: Guard tracked Markdown
+        run: python scripts/release/guard_markdown.py --repo-root .
+
       - name: Fail if version already exists on PyPI
         run: |
           python - <<'PY'

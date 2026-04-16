@@ -10,3 +10,8 @@ build/
 .coverage
 htmlcov/
 .worktrees/
+
+# Private agent/local notes. README.md is the only tracked Markdown exception.
+*.md
+!README.md
+.mcpclient/

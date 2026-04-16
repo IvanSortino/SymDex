@@ -9,6 +9,7 @@ import textwrap
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 VALIDATE_METADATA = ROOT / "scripts" / "release" / "validate_metadata.py"
 VALIDATE_DIST = ROOT / "scripts" / "release" / "validate_dist.py"
+GUARD_MARKDOWN = ROOT / "scripts" / "release" / "guard_markdown.py"
 
 
 def run_script(*args: str) -> subprocess.CompletedProcess[str]:
@@ -21,10 +22,38 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def init_git_repo(path: pathlib.Path) -> None:
+    subprocess.run(["git", "init"], check=True, cwd=path, capture_output=True, text=True)
+    subprocess.run(["git", "add", "."], check=True, cwd=path, capture_output=True, text=True)
+
+
 def test_validate_metadata_accepts_current_pyproject():
     result = run_script(str(VALIDATE_METADATA), "--pyproject", str(ROOT / "pyproject.toml"))
     assert result.returncode == 0, result.stderr or result.stdout
     assert "Validated package metadata" in result.stdout
+
+
+def test_guard_markdown_accepts_readme_only(tmp_path):
+    (tmp_path / "README.md").write_text("public docs\n", encoding="utf-8")
+    (tmp_path / "package.py").write_text("VALUE = 1\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+
+    result = run_script(str(GUARD_MARKDOWN), "--repo-root", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "No disallowed Markdown files tracked" in result.stdout
+
+
+def test_guard_markdown_rejects_non_readme_markdown(tmp_path):
+    (tmp_path / "README.md").write_text("public docs\n", encoding="utf-8")
+    (tmp_path / "PRIVATE.md").write_text("private instructions\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+
+    result = run_script(str(GUARD_MARKDOWN), "--repo-root", str(tmp_path))
+
+    assert result.returncode != 0
+    assert "Tracked Markdown files are not allowed" in (result.stderr or result.stdout)
+    assert "PRIVATE.md" in (result.stderr or result.stdout)
 
 
 def test_validate_metadata_rejects_mismatched_tag(tmp_path):
