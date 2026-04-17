@@ -8,7 +8,9 @@ import os
 import time
 import pytest
 import tempfile
+from pathlib import Path
 from symdex.mcp.tools import get_index_status_tool, index_folder_tool
+from symdex.core.state import get_watch_pid_path
 
 
 # ── Isolation ──────────────────────────────────────────────────────────────────
@@ -105,3 +107,25 @@ def test_get_index_status_returns_fields():
         assert resp["stale"] is False  # Freshly indexed, not stale
         assert isinstance(resp["watcher_active"], bool)
         assert resp["watcher_active"] is False  # No watcher running in test
+
+
+def test_get_index_status_uses_local_state_watch_pid_path():
+    """watcher_active should follow SYMDEX_STATE_DIR instead of the legacy global path."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src = Path(tmpdir) / "statusproject"
+        src.mkdir()
+        mod_path = src / "mod.py"
+        mod_path.write_text("def hello():\n    return 'hello'\n")
+        past = time.time() - 10
+        os.utime(mod_path, (past, past))
+
+        result = index_folder_tool(path=str(src), name="watched_status_repo")
+        assert "indexed" in result
+
+        watch_pid_path = Path(get_watch_pid_path("watched_status_repo"))
+        watch_pid_path.parent.mkdir(parents=True, exist_ok=True)
+        watch_pid_path.write_text("999999", encoding="utf-8")
+
+        resp = get_index_status_tool(repo="watched_status_repo")
+
+        assert resp["watcher_active"] is True

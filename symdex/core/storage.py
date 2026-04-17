@@ -13,7 +13,12 @@ from typing import Optional
 import numpy as np
 import sqlite_vec
 
-from symdex.core.state import get_state_paths, resolve_registry_value, serialize_registry_value
+from symdex.core.state import (
+    get_state_paths,
+    get_watch_pid_path,
+    resolve_registry_value,
+    serialize_registry_value,
+)
 
 DEFAULT_SYMBOL_LIMIT = 20
 
@@ -497,10 +502,9 @@ def get_index_status(repo: str, db_path: str) -> dict:
     - last_indexed: str ISO8601 UTC (max indexed_at from files table, or None)
     - age_seconds: float (seconds since last_indexed, or None)
     - stale: bool (True if any file's mtime > last_indexed, False otherwise)
-    - watcher_active: bool (True if ~/.symdex-mcp/{repo}.watch.pid exists)
+    - watcher_active: bool (True if a watcher metadata file exists for the active state)
     """
     import datetime
-    from pathlib import Path
 
     conn = get_connection(db_path)
     try:
@@ -580,7 +584,7 @@ def get_index_status(repo: str, db_path: str) -> dict:
                         break
 
         # Check if watcher is active
-        watch_pid_path = Path.home() / ".symdex-mcp" / f"{repo}.watch.pid"
+        watch_pid_path = pathlib.Path(get_watch_pid_path(repo))
         watcher_active = watch_pid_path.exists()
 
     finally:

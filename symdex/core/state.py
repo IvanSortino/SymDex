@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 LOCAL_STATE_DIRNAME = ".symdex"
+LEGACY_GLOBAL_WATCH_PID_DIRNAME = ".symdex-mcp"
+LOCAL_WATCH_PID_DIRNAME = "watchers"
+WATCH_PID_SUFFIX = ".watch.pid"
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,19 @@ def get_state_paths() -> StatePaths:
         workspace_root=workspace_root,
         local_mode=local_mode,
     )
+
+
+def get_watch_pid_dir() -> str:
+    """Return the directory used for watcher metadata files."""
+    state = get_state_paths()
+    if state.local_mode:
+        return os.path.join(state.base_dir, LOCAL_WATCH_PID_DIRNAME)
+    return os.path.join(os.path.expanduser("~"), LEGACY_GLOBAL_WATCH_PID_DIRNAME)
+
+
+def get_watch_pid_path(repo: str) -> str:
+    """Return the watcher metadata path for *repo*."""
+    return os.path.join(get_watch_pid_dir(), f"{repo}{WATCH_PID_SUFFIX}")
 
 
 def serialize_registry_value(path: str, state: StatePaths) -> str:

@@ -5,6 +5,8 @@ from symdex.core.state import (
     discover_local_state_dir,
     get_default_global_state_dir,
     get_state_paths,
+    get_watch_pid_dir,
+    get_watch_pid_path,
     resolve_registry_value,
     serialize_registry_value,
 )
@@ -67,3 +69,30 @@ def test_registry_value_round_trip_for_local_state(tmp_path, monkeypatch):
 
     assert stored == "./src/module.py"
     assert os.path.normpath(resolved) == os.path.normpath(str(target))
+
+
+def test_watch_pid_path_defaults_to_legacy_global_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("SYMDEX_STATE_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    expected_dir = os.path.join(os.path.expanduser("~"), ".symdex-mcp")
+
+    assert os.path.normpath(get_watch_pid_dir()) == os.path.normpath(expected_dir)
+    assert os.path.normpath(get_watch_pid_path("repo")) == os.path.normpath(
+        os.path.join(expected_dir, "repo.watch.pid")
+    )
+
+
+def test_watch_pid_path_uses_local_state_dir(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    state_dir = workspace / ".symdex"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("SYMDEX_STATE_DIR", str(state_dir))
+
+    expected_dir = state_dir / "watchers"
+
+    assert os.path.normpath(get_watch_pid_dir()) == os.path.normpath(str(expected_dir))
+    assert os.path.normpath(get_watch_pid_path("repo")) == os.path.normpath(
+        str(expected_dir / "repo.watch.pid")
+    )

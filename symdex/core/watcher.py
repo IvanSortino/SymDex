@@ -18,11 +18,12 @@ from watchdog.observers import Observer
 from symdex.core.naming import derive_repo_name
 from symdex.core.indexer import index_folder, _SKIP_DIRS, _SKIP_EXTENSIONS
 from symdex.core.storage import get_db_path, get_connection
+from symdex.core.state import WATCH_PID_SUFFIX, get_watch_pid_dir
 
 logger = logging.getLogger(__name__)
 
 _SKIP_DIR_PARTS = _SKIP_DIRS
-_WATCHER_METADATA_SUFFIX = ".watch.pid"
+_WATCHER_METADATA_SUFFIX = WATCH_PID_SUFFIX
 
 
 class WatcherAlreadyRunningError(RuntimeError):
@@ -46,7 +47,7 @@ def _watch_root(path: str) -> str:
 
 def _watch_pid_dir() -> Path:
     """Return the directory that stores watcher metadata files."""
-    return Path.home() / ".symdex-mcp"
+    return Path(get_watch_pid_dir())
 
 
 def _watch_pid_file(repo: str) -> Path:
