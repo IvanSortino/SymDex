@@ -36,8 +36,9 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - Re-check `get_index_status` after major edits or worktree switches.
 - Read full files only when editing, reviewing unsupported or generated content, or when SymDex cannot answer.
 - Optimize for lower-token retrieval, not broad context loading.
-- If a search tool returns `roi` or `roi_summary`, mention the approximate token savings briefly in your response.
+- If a search tool returns `roi`, `roi_summary`, or `roi_agent_hint`, mention the approximate token savings briefly in your response.
 - If the repo uses workspace-local SymDex state (`./.symdex`), stay inside that workspace so the same index is auto-discovered.
+- Treat `symdex watch` as low-memory by default; only request `--embed` when semantic embeddings must refresh on file changes.
 
 ## Tool Selection
 
@@ -95,6 +96,13 @@ When you need to edit code:
 1. Use SymDex to find the exact symbol or file location.
 2. Read only that file or symbol slice.
 3. Make the smallest change needed.
+
+## Watch And Semantic Search
+
+- `symdex watch` refreshes structural indexes by default without loading local embedding models.
+- Use `symdex watch --embed` only when the task needs semantic search to stay fresh continuously.
+- If `semantic_search` has no embeddings, fall back to `search_symbols` or `search_text`, or re-index after enabling `symdex[local]` or a hosted embedding backend.
+- Workspace-local state keeps watcher metadata under `./.symdex`, so commands should run from that workspace or pass the matching `--state-dir`.
 
 ## Use Normal Browsing Only When Needed
 

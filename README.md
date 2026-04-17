@@ -59,38 +59,37 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 
 ---
 
-## Why SymDex
+## What SymDex Does
 
-SymDex exists for one reason:
-- stop agents from reading whole files just to find one function
+AI coding agents are useful until they have to rediscover your repo from scratch. They open whole files, grep broad patterns, miss the route handler, read the same utility twice, and spend thousands of tokens just getting oriented.
 
-In plain terms:
-- SymDex is not another grep wrapper and not another black-box hosted index
-- SymDex is the repo-local intelligence layer that makes coding agents feel like they already know your codebase
-- it turns blind file-browsing into exact retrieval
-- and it does that while cutting token spend hard
+SymDex gives agents a repo-local retrieval layer before they start reading code.
 
-SymDex pre-indexes a repository into:
-- a symbol table with byte offsets
-- semantic embeddings for intent search
-- a call graph
+It indexes your project into a small local SQLite knowledge base with:
+
+- exact symbols and byte offsets
+- file outlines and repo summaries
+- literal text search
+- optional semantic search
+- callers, callees, and circular dependency checks
 - extracted HTTP routes
-- a registry in the active SymDex state directory (`~/.symdex` by default or workspace-local `./.symdex`)
+- a registry for one repo, many repos, or many worktrees
 
-That lets an agent jump straight to the exact symbol or file slice it needs, which means fewer blind file reads and materially lower token burn.
+Then agents can ask for the narrow slice they need: the function, route, caller chain, file outline, or intent match. That means less blind browsing, less context waste, and answers that can explain how much token budget SymDex saved.
 
-Highlights:
-- `symdex index` prints a code summary with files, Lines of Code, symbol counts, routes, skipped files, and language breakdown
-- `symdex search`, `find`, `text`, and `semantic` print approximate token-savings footers
-- Kotlin, Dart, and Swift are grammar-backed parser targets, so Android, Flutter, and iOS codebases are first-class citizens
-- route extraction covers Spring and Kotlin, Gin-style Go routers, ASP.NET, Rails and Sinatra, Phoenix, and Actix in addition to Python, JS/TS, and Laravel
-- normal CLI commands show an upgrade notice when a newer SymDex release is available
-- `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
-- omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
-- `symdex watch` stays lightweight by default: it refreshes symbols, routes, text search, and graphs without loading the local embedding model unless `--embed` is passed
-- local `sentence-transformers` embeddings live behind the optional `symdex[local]` extra
-- Voyage AI is available as an optional embedding backend, including optional multimodal asset indexing
-- optional workspace-local state keeps repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces
+SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or use the Voyage extras when you want hosted embeddings and optional multimodal indexing.
+
+Current product stage:
+
+- 17 language surfaces, including Markdown headings and supported fenced code blocks
+- Android, Flutter, and iOS coverage through Kotlin, Dart, and Swift parser targets
+- route extraction across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
+- one-line CLI token-savings footers after successful search commands
+- MCP `roi`, `roi_summary`, and `roi_agent_hint` fields so agents can mention savings in their final response
+- low-memory `symdex watch` by default: structural refresh without loading embedding models unless `--embed` is passed
+- duplicate watcher protection, idle auto-exit, and state-aware watcher metadata
+- workspace-local `./.symdex` state for Docker, portable workspaces, and teams that do not want indexes hidden in home directories
+- upgrade notices with exact `pip`, `uv tool`, and `uvx` commands when a newer release exists
 
 ---
 
@@ -120,16 +119,22 @@ Installing through the `skills` CLI uses the same public path that skills.sh ind
 ## 60-second quickstart
 
 ```bash
-# Install
-pip install "symdex[local]"
+# Install the lean core
+pip install symdex
 # or
-uv tool install "symdex[local]"
+uv tool install symdex
 
 # Index a project
 symdex index ./myproject --repo myproject
 
 # Search by symbol name
 symdex search "validate_email" --repo myproject
+
+# Search by literal text
+symdex text "JWT" --repo myproject
+
+# Add local semantic search only when you want embeddings
+pip install "symdex[local]"
 
 # Search by intent
 symdex semantic "check email format" --repo myproject
@@ -145,6 +150,7 @@ Notes:
 - If you omit `--repo` on `symdex index` or `symdex watch`, SymDex auto-generates a stable repo id from the current git branch and worktree path hash.
 - After indexing, SymDex prints a code summary.
 - After successful search commands, SymDex prints a one-line ROI footer with approximate token savings.
+- MCP search tools also return `roi_agent_hint`, so agents can fold the savings into their user-facing response instead of burying it in logs.
 - When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
 - Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
 - `--state-dir` can be passed either globally or after the subcommand, for example `symdex --state-dir .symdex repos` or `symdex repos --state-dir .symdex`.
@@ -216,10 +222,12 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 | Repo outline | Get a directory tree plus repo summary through MCP |
 | Call graph | Trace callers, callees, and circular dependencies |
 | HTTP routes | Extract Flask, FastAPI, Django, Express, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix routes |
-| Auto-watch | Re-index on change, avoid duplicate watchers, and stay low-memory by default |
+| Markdown-aware docs | Index Markdown headings and supported fenced code blocks for SDK docs, specs, repo docs, and design notes |
+| Auto-watch | Re-index on change, avoid duplicate watchers, stay low-memory by default, and auto-exit after idle time |
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
-| Workspace-local state | Keep repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces |
+| Workspace-local state | Keep repo databases, `registry.json`, and watcher metadata inside `./.symdex` for Docker and portable workspaces |
 | Search ROI footer | One-line approximate token savings after successful search commands |
+| Agent ROI hint | MCP tools return `roi_agent_hint` so agents can mention savings naturally in their replies |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
 | Optional embedding backends | Add `symdex[local]` for local embeddings or `symdex[voyage]` for hosted embeddings only when needed |
 
@@ -409,7 +417,7 @@ Notes:
 ## FAQ
 
 **Where are indexes stored?**
-By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. If you set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...`, SymDex keeps repo databases, `registry.db`, and `registry.json` inside the current workspace instead.
+By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. If you set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...`, SymDex keeps repo databases, `registry.db`, `registry.json`, and watcher metadata inside the current workspace instead.
 
 **What does indexing print?**
 A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.
@@ -427,7 +435,7 @@ Not by default. Install `symdex[local]` for the local backend; it downloads its 
 That repo was indexed without an embedding backend, or kept fresh by the default low-memory watch mode. Install `symdex[local]` for local embeddings or enable Voyage, then run `symdex index` or `symdex watch --embed` so embeddings are written into the index.
 
 **Will `symdex watch` keep a large embedding model in memory?**
-No, not by default. Watch mode refreshes the structural index without loading the local semantic model unless `--embed` is passed. It also refuses duplicate watchers for the same repo/root and can auto-exit after an idle timeout.
+No, not by default. Watch mode refreshes the structural index without loading the local semantic model unless `--embed` is passed. It also refuses duplicate watchers for the same repo/root, can auto-exit after an idle timeout, and stores watcher metadata in the active state directory so workspace-local mode stays isolated.
 
 **Can I install SymDex without sentence-transformers?**
 Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph features without the local embedding dependencies. Install `symdex[local]` only when you want local semantic search.
