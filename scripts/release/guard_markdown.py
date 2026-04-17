@@ -5,7 +5,10 @@ import pathlib
 import subprocess
 
 
-ALLOWED_MARKDOWN = {"README.md"}
+ALLOWED_MARKDOWN = {
+    "README.md",
+    "skills/symdex-code-search/SKILL.md",
+}
 
 
 def tracked_markdown_files(repo_root: pathlib.Path) -> list[str]:
@@ -35,7 +38,7 @@ def disallowed_markdown_files(repo_root: pathlib.Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Fail if tracked Markdown files other than README.md are present."
+        description="Fail if tracked private Markdown files are present."
     )
     parser.add_argument("--repo-root", default=".", help="Repository root to check")
     args = parser.parse_args()
@@ -45,7 +48,7 @@ def main() -> int:
     if disallowed:
         formatted = "\n".join(f"  - {path}" for path in disallowed)
         raise SystemExit(
-            "Tracked Markdown files are not allowed; README.md is the only exception:\n"
+            "Tracked Markdown files are not allowed outside the public allowlist:\n"
             f"{formatted}"
         )
 

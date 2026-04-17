@@ -44,6 +44,19 @@ def test_guard_markdown_accepts_readme_only(tmp_path):
     assert "No disallowed Markdown files tracked" in result.stdout
 
 
+def test_guard_markdown_accepts_public_skill_manifest(tmp_path):
+    skill = tmp_path / "skills" / "symdex-code-search" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    (tmp_path / "README.md").write_text("public docs\n", encoding="utf-8")
+    skill.write_text("public skill\n", encoding="utf-8")
+    init_git_repo(tmp_path)
+
+    result = run_script(str(GUARD_MARKDOWN), "--repo-root", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "No disallowed Markdown files tracked" in result.stdout
+
+
 def test_guard_markdown_rejects_non_readme_markdown(tmp_path):
     (tmp_path / "README.md").write_text("public docs\n", encoding="utf-8")
     (tmp_path / "PRIVATE.md").write_text("private instructions\n", encoding="utf-8")

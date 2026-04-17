@@ -11,7 +11,10 @@ build/
 htmlcov/
 .worktrees/
 
-# Private agent/local notes. README.md is the only tracked Markdown exception.
+# Private agent/local notes. README.md and the public SymDex skill are tracked.
 *.md
 !README.md
+!skills/
+!skills/symdex-code-search/
+!skills/symdex-code-search/SKILL.md
 .mcpclient/
