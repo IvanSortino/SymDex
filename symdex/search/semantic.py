@@ -238,8 +238,6 @@ def embed_asset_for_index(
 def embed_text(text: str, progress_callback: Optional[Callable[[str], None]] = None) -> np.ndarray:
     """Return float32 embedding vector for text."""
     backend = _backend()
-    if backend == "mcpclient":
-        return _embed_mcpclient(text)
     if backend == "voyage":
         return _embed_voyage_text(text, input_type="document", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
@@ -256,8 +254,6 @@ def embed_for_index(
     Asymmetric models expect the 'search_document: ' prefix for indexed text.
     """
     backend = _backend()
-    if backend == "mcpclient":
-        return _embed_mcpclient(f"search_document: {text}")
     if backend == "voyage":
         return _embed_voyage_text(text, input_type="document", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
@@ -274,23 +270,11 @@ def embed_for_query(
     Asymmetric models expect the 'search_query: ' prefix for query text.
     """
     backend = _backend()
-    if backend == "mcpclient":
-        return _embed_mcpclient(f"search_query: {text}")
     if backend == "voyage":
         return _embed_voyage_text(text, input_type="query", progress_callback=progress_callback)
     model = _get_model(progress_callback=progress_callback)
     vec = model.encode(f"search_query: {text}", normalize_embeddings=True)
     return vec.astype("float32")
-
-
-def _embed_mcpclient(text: str) -> np.ndarray:
-    import mcp
-    client = mcp.MCP project()
-    response = client.embeddings.create(
-        model="voyage-code-2",
-        input=[text],
-    )
-    return np.array(response.embeddings[0].embedding, dtype="float32")
 
 
 def search_semantic(

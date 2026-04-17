@@ -16,7 +16,6 @@
 
 <br>
 
-[![MCP client](https://img.shields.io/badge/MCP client-black?style=flat-square&logo=mcp)](https://mcpclient.ai)
 [![Cursor](https://img.shields.io/badge/Cursor-black?style=flat-square)](https://cursor.sh)
 [![Codex](https://img.shields.io/badge/Codex_CLI-black?style=flat-square&logo=openai)](https://github.com/openai/codex)
 [![Gemini](https://img.shields.io/badge/Gemini_CLI-black?style=flat-square&logo=google)](https://github.com/google-gemini/gemini-cli)
@@ -347,8 +346,6 @@ SymDex works with any MCP client that supports stdio or streamable HTTP.
 
 | Platform | Typical setup |
 |---|---|
-| MCP desktop client | Add to `mcp_client_config.json` |
-| MCP client Code | `mcp-client add symdex -- uvx symdex serve` |
 | Codex CLI | Add to MCP settings |
 | Gemini CLI | Add to MCP settings |
 | Cursor | `.cursor/mcp.json` |

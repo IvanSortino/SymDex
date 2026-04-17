@@ -140,7 +140,7 @@ def get_repo_stats(repo: str) -> dict:
         "Generate a Mermaid call-graph diagram for an indexed repo. "
         "Nodes are files; edges are call relationships. "
         "Optionally focus on a single file with BFS depth limit. "
-        "Cycle edges are marked red. Renders in MCP client, GitHub, Cursor, and any Markdown viewer."
+        "Cycle edges are marked red. Renders in GitHub, Cursor, and Markdown viewers."
     ),
 )
 def get_graph_diagram(
