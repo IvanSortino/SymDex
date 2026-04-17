@@ -14,7 +14,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
-from symdex.core.watcher import watch as _watch_repo
+from symdex.core.watcher import WatcherAlreadyRunningError, watch as _watch_repo
 from symdex.core.storage import (
     get_connection,
     get_db_path,
@@ -657,6 +657,21 @@ def watch(
         help="Repo name (omit to auto-generate from git branch and path hash)",
     ),
     interval: float = typer.Option(5.0, "--interval", "-i", help="Seconds between re-index cycles."),
+    embed: bool = typer.Option(
+        False,
+        "--embed",
+        help="Refresh semantic embeddings while watching. Off by default to keep watch low-memory.",
+    ),
+    idle_timeout: float = typer.Option(
+        1800.0,
+        "--idle-timeout",
+        help="Exit after this many seconds with no file activity. Use 0 to disable.",
+    ),
+    forever: bool = typer.Option(
+        False,
+        "--forever",
+        help="Disable idle shutdown and keep the watcher running until interrupted.",
+    ),
     state_dir: Optional[str] = typer.Option(
         None,
         "--state-dir",
@@ -666,9 +681,24 @@ def watch(
     """Watch a directory and keep its index up to date automatically."""
     _apply_state_dir_override(state_dir)
     _maybe_print_update_notice(sys.argv[1:])
-    console.print(f"[bold]Watching[/bold] {path} (interval={interval}s) - Ctrl+C to stop")
+    effective_idle_timeout = None if forever or idle_timeout <= 0 else idle_timeout
+    mode = "with semantic embeddings" if embed else "low-memory, no embedding refresh"
+    idle_label = "disabled" if effective_idle_timeout is None else f"{effective_idle_timeout:g}s"
+    console.print(
+        f"[bold]Watching[/bold] {path} "
+        f"(interval={interval:g}s, {mode}, idle-timeout={idle_label}) - Ctrl+C to stop"
+    )
     try:
-        _watch_repo(path, repo=repo, interval=interval)
+        _watch_repo(
+            path,
+            repo=repo,
+            interval=interval,
+            embed=embed,
+            idle_timeout=effective_idle_timeout,
+        )
+    except WatcherAlreadyRunningError as exc:
+        console.print(f"[yellow]{escape(str(exc))}[/yellow]")
+        raise typer.Exit(0) from exc
     except KeyboardInterrupt:
         console.print("\n[yellow]Watch stopped.[/yellow]")
 

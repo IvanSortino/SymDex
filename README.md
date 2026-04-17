@@ -87,6 +87,7 @@ Highlights:
 - normal CLI commands show an upgrade notice when a newer SymDex release is available
 - `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
+- `symdex watch` stays lightweight by default: it refreshes symbols, routes, text search, and graphs without loading the local embedding model unless `--embed` is passed
 - local `sentence-transformers` embeddings live behind the optional `symdex[local]` extra
 - Voyage AI is available as an optional embedding backend, including optional multimodal asset indexing
 - optional workspace-local state keeps repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces
@@ -215,7 +216,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 | Repo outline | Get a directory tree plus repo summary through MCP |
 | Call graph | Trace callers, callees, and circular dependencies |
 | HTTP routes | Extract Flask, FastAPI, Django, Express, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix routes |
-| Auto-watch | Re-index on change and keep the index fresh |
+| Auto-watch | Re-index on change, avoid duplicate watchers, and stay low-memory by default |
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
 | Workspace-local state | Keep repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces |
 | Search ROI footer | One-line approximate token savings after successful search commands |
@@ -246,7 +247,8 @@ If you need full type-system reasoning or editor-native refactors, a language se
 # Indexing and maintenance
 symdex index ./myproject --repo myproject       # Index with an explicit repo id
 symdex index ./myproject                        # Auto-name from git branch + path hash
-symdex watch ./myproject --repo myproject       # Keep an index fresh automatically
+symdex watch ./myproject --repo myproject       # Keep an index fresh without loading embedding models
+symdex watch ./myproject --repo myproject --embed  # Also refresh semantic embeddings on change
 symdex invalidate --repo myproject              # Force re-index of a repo
 symdex invalidate --repo myproject --file app.py
 symdex gc                                       # Remove stale index databases
@@ -422,7 +424,10 @@ Yes. Interactive CLI commands can print a brief upgrade notice with exact comman
 Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.
 
 **Why does `symdex semantic` say my repo has no semantic embeddings?**
-That repo was indexed without an embedding backend. Install `symdex[local]` for local embeddings or enable Voyage, then re-index the repo so embeddings are written into the index.
+That repo was indexed without an embedding backend, or kept fresh by the default low-memory watch mode. Install `symdex[local]` for local embeddings or enable Voyage, then run `symdex index` or `symdex watch --embed` so embeddings are written into the index.
+
+**Will `symdex watch` keep a large embedding model in memory?**
+No, not by default. Watch mode refreshes the structural index without loading the local semantic model unless `--embed` is passed. It also refuses duplicate watchers for the same repo/root and can auto-exit after an idle timeout.
 
 **Can I install SymDex without sentence-transformers?**
 Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph features without the local embedding dependencies. Install `symdex[local]` only when you want local semantic search.

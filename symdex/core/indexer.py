@@ -97,6 +97,43 @@ def _embed_symbols(
             logger.warning("Embedding failed for symbol %s (id=%s): %s", name, symbol_id, exc)
 
 
+def _index_asset_file(
+    conn,
+    repo: str,
+    rel_file: str,
+    abs_file: str,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> None:
+    from symdex.search.semantic import embed_asset_for_index
+
+    asset_name = rel_file
+    try:
+        upsert_symbol(
+            conn,
+            repo=repo,
+            file=rel_file,
+            name=asset_name,
+            kind="asset",
+            start_byte=0,
+            end_byte=0,
+            signature=None,
+            docstring=None,
+        )
+        vec = embed_asset_for_index(abs_file, progress_callback=progress_callback)
+        asset_id = conn.execute(
+            "SELECT id FROM symbols WHERE repo=? AND file=? AND name=?",
+            (repo, rel_file, asset_name),
+        ).fetchone()["id"]
+        upsert_embedding(conn, asset_id, vec)
+    except RuntimeError as exc:
+        message = str(exc)
+        if "symdex[" in message:
+            _warn_optional_embedding_once(message)
+            return
+        logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
+        raise
+
+
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv",
     ".tox", "dist", "build", ".mypy_cache", ".pytest_cache",
@@ -165,6 +202,7 @@ def index_folder(
     repo: str | None = None,
     name: str | None = None,
     progress_callback: Optional[Callable[[str], None]] = None,
+    embed: bool = True,
 ) -> IndexResult:
     """Index all source files in path. Skips unchanged files via SHA256 hash.
 
@@ -173,6 +211,8 @@ def index_folder(
         repo: Repo name override. When omitted, a stable repo name is derived
             from the folder name, git branch (if available), and path hash.
         name: Backward-compatible alias for repo.
+        embed: When False, skip semantic embedding work while still indexing
+            symbols, routes, call graphs, hashes, and summaries.
 
     Returns:
         IndexResult with repo, db_path, indexed_count, skipped_count.
@@ -220,36 +260,17 @@ def index_folder(
                 )
 
                 if _voyage_multimodal_enabled() and ext in _VOYAGE_ASSET_EXTENSIONS:
-                    from symdex.search.semantic import embed_asset_for_index
-
-                    asset_name = rel_file
+                    if not embed:
+                        continue
                     try:
-                        upsert_symbol(
+                        _index_asset_file(
                             conn,
                             repo=repo,
-                            file=rel_file,
-                            name=asset_name,
-                            kind="asset",
-                            start_byte=0,
-                            end_byte=0,
-                            signature=None,
-                            docstring=None,
+                            rel_file=rel_file,
+                            abs_file=abs_file,
+                            progress_callback=progress_callback,
                         )
-                        vec = embed_asset_for_index(abs_file, progress_callback=progress_callback)
-                        asset_id = conn.execute(
-                            "SELECT id FROM symbols WHERE repo=? AND file=? AND name=?",
-                            (repo, rel_file, asset_name),
-                        ).fetchone()["id"]
-                        upsert_embedding(conn, asset_id, vec)
-                    except RuntimeError as exc:
-                        message = str(exc)
-                        if "symdex[" in message:
-                            _warn_optional_embedding_once(message)
-                            continue
-                        logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
-                        errored += 1
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("Asset embedding failed for %s: %s", abs_file, exc)
+                    except Exception:  # noqa: BLE001
                         errored += 1
                 else:
                     symbols = parse_file(abs_file, path)
@@ -265,7 +286,13 @@ def index_folder(
                             signature=sym.get("signature"),
                             docstring=sym.get("docstring"),
                         )
-                    _embed_symbols(conn, repo=repo, file_path=rel_file, progress_callback=progress_callback)
+                    if embed:
+                        _embed_symbols(
+                            conn,
+                            repo=repo,
+                            file_path=rel_file,
+                            progress_callback=progress_callback,
+                        )
                     sym_rows = conn.execute(
                         "SELECT id, name, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
                         (repo, rel_file),
