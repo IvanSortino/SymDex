@@ -79,15 +79,15 @@ SymDex pre-indexes a repository into:
 
 That lets an agent jump straight to the exact symbol or file slice it needs, which means fewer blind file reads and materially lower token burn.
 
-Current main-branch highlights:
+Highlights:
 - `symdex index` prints a code summary with files, Lines of Code, symbol counts, routes, skipped files, and language breakdown
 - `symdex search`, `find`, `text`, and `semantic` print approximate token-savings footers
-- Kotlin, Dart, and Swift are now grammar-backed parser targets, so Android, Flutter, and iOS codebases are first-class citizens
-- route extraction now covers Spring and Kotlin, Gin-style Go routers, ASP.NET, Rails and Sinatra, Phoenix, and Actix in addition to Python, JS/TS, and Laravel
-- normal CLI commands now show an upgrade notice when a newer SymDex release is available
+- Kotlin, Dart, and Swift are grammar-backed parser targets, so Android, Flutter, and iOS codebases are first-class citizens
+- route extraction covers Spring and Kotlin, Gin-style Go routers, ASP.NET, Rails and Sinatra, Phoenix, and Actix in addition to Python, JS/TS, and Laravel
+- normal CLI commands show an upgrade notice when a newer SymDex release is available
 - `--repo` is the canonical naming flag, with `--name` retained as a compatibility alias
 - omitting `--repo` on `index` and `watch` auto-generates a stable repo id from the current git branch and worktree path hash
-- local `sentence-transformers` embeddings now live behind the optional `symdex[local]` extra
+- local `sentence-transformers` embeddings live behind the optional `symdex[local]` extra
 - Voyage AI is available as an optional embedding backend, including optional multimodal asset indexing
 - optional workspace-local state keeps repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces
 
@@ -112,9 +112,7 @@ What it does:
 
 The skill lives in this repo at `skills/symdex-code-search/SKILL.md` and follows the standard `skills/<name>/SKILL.md` layout.
 
-If you are wiring SymDex into an agent workflow directly from this repo, start with [AGENTS.md](AGENTS.md) too.
-
-Installing through the `skills` CLI is also the path that feeds skills.sh discovery telemetry.
+Installing through the `skills` CLI uses the same public path that skills.sh indexes.
 
 ---
 
@@ -149,7 +147,7 @@ Notes:
 - When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
 - Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
 - `--state-dir` can be passed either globally or after the subcommand, for example `symdex --state-dir .symdex repos` or `symdex repos --state-dir .symdex`.
-- Canonical CLI commands are `index` and `repos`. Shell compatibility aliases now also accept MCP-shaped names like `index-folder`, `index-repo`, and `list-repos`.
+- Canonical CLI commands are `index` and `repos`. Shell compatibility aliases also accept MCP-shaped names like `index-folder`, `index-repo`, and `list-repos`.
 - Semantic search requires stored embeddings. If a repo was indexed before `symdex[local]` or Voyage was enabled, re-index it after enabling the backend you want.
 
 Add to your agent config:
@@ -181,7 +179,7 @@ HTTP mode:
 
 ## Workspace-local state and Docker
 
-SymDex still defaults to `~/.symdex`, but it now also supports a workspace-local state directory for portable and containerized workflows.
+SymDex defaults to `~/.symdex` and also supports a workspace-local state directory for portable and containerized workflows.
 
 Use it like this on first setup:
 
@@ -228,7 +226,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 
 ## Where SymDex Fits
 
-The old README used a named-tool matrix. I removed it during the cleanup because those claims go stale quickly and are hard to keep precise. This smaller section keeps the positioning signal without overcommitting on other tools' current feature sets.
+SymDex is built for agents that need precise repo-local retrieval without depending on an editor session, hosted index, or heavyweight service stack.
 
 | Approach | Strong at | Tradeoff | Where SymDex differs |
 |---|---|---|---|
@@ -357,7 +355,7 @@ SymDex works with any MCP client that supports stdio or streamable HTTP.
 
 ## Voyage AI embeddings
 
-Base `symdex` now installs the lean core only. Choose the embedding extra that matches how you want semantic search to work:
+Base `symdex` installs the lean core only. Choose the embedding extra that matches how you want semantic search to work:
 
 - `symdex[local]` for local `sentence-transformers`
 - `symdex[voyage]` for Voyage text embeddings
@@ -410,14 +408,14 @@ Notes:
 **Where are indexes stored?**
 By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. If you set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...`, SymDex keeps repo databases, `registry.db`, and `registry.json` inside the current workspace instead.
 
-**What does indexing print now?**
+**What does indexing print?**
 A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.
 
-**What do search commands print now?**
+**What do search commands print?**
 CLI search commands print an approximate ROI footer showing lines searched, tokens that would likely have been spent without SymDex, tokens used with SymDex, and tokens saved. MCP search tools return the same data as structured `roi` plus a plain-English `roi_summary` string so clients like Codex can surface it more clearly.
 
 **Do existing users get update notices?**
-Yes. Normal human-facing CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.
+Yes. Interactive CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.
 
 **Does semantic search require the internet?**
 Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.
@@ -432,7 +430,7 @@ Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph fea
 Yes. SymDex maintains a central registry, supports explicit `--repo` names, and can auto-generate stable repo ids from the current branch and worktree path when you omit `--repo`.
 
 **Why do some agent logs show `index-folder` or `list-repos` while the CLI docs say `index` and `repos`?**
-`index_folder` and `list_repos` are MCP tool names. The canonical shell commands are `symdex index` and `symdex repos`, but SymDex now also accepts compatibility aliases such as `symdex index-folder` and `symdex list-repos`.
+`index_folder` and `list_repos` are MCP tool names. The canonical shell commands are `symdex index` and `symdex repos`, and SymDex also accepts compatibility aliases such as `symdex index-folder` and `symdex list-repos`.
 
 **What happens when I delete a worktree or repo?**
 Run `symdex gc` or call `gc_stale_indexes` through MCP. SymDex removes stale registry entries and their database files.
