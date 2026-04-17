@@ -78,8 +78,10 @@ Then agents can ask for the narrow slice they need: the function, route, caller 
 
 SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or use the Voyage extras when you want hosted embeddings and optional multimodal indexing.
 
-Current product stage:
+Current product stage as of April 17, 2026:
 
+- package version `0.1.23`; latest public tag `v0.1.23`
+- 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
 - 17 language surfaces, including Markdown headings and supported fenced code blocks
 - Android, Flutter, and iOS coverage through Kotlin, Dart, and Swift parser targets
 - route extraction across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix

@@ -14,6 +14,15 @@ Use SymDex before broad file browsing.
 Use it to save tokens by retrieving the exact code the agent needs instead of scanning whole files.
 SymDex currently covers 17 language surfaces, including Python, Go, Kotlin, Dart, Swift, Vue script blocks, and Markdown headings plus supported fenced code blocks.
 
+## Current Product Snapshot
+
+- Package version: `0.1.23`
+- Current tool surface: 20 MCP tools
+- Search outputs: one-line CLI token-savings footers plus MCP `roi`, `roi_summary`, and `roi_agent_hint`
+- Watch behavior: low-memory structural refresh by default; use `symdex watch --embed` only when semantic embeddings must refresh continuously
+- State model: global `~/.symdex` by default, optional workspace-local `./.symdex` with `registry.json`
+- Markdown support: `.md` and `.markdown` headings plus supported fenced code blocks are indexed alongside source files
+
 ## Start Here
 
 1. If the SymDex CLI reports a newer release, prefer upgrading before long sessions.
