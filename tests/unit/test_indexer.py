@@ -155,7 +155,14 @@ def test_get_git_branch_sanitizes_slashes(tmp_path):
     assert branch == "task-123-fix-stuff"
 
 
-def test_get_git_branch_returns_none_for_non_git_dir(tmp_path):
+def test_get_git_branch_returns_none_for_non_git_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], returncode=128, stdout="", stderr="not a git repo"
+        ),
+    )
     result = get_git_branch(str(tmp_path))
     assert result is None
 

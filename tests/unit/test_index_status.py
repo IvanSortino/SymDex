@@ -17,6 +17,8 @@ from symdex.mcp.tools import get_index_status_tool, index_folder_tool
 def isolate(monkeypatch):
     """Isolate tests by using a unique temp directory for each test."""
     with tempfile.TemporaryDirectory() as tmp_dir:
+        monkeypatch.setenv("SYMDEX_STATE_DIR", os.path.join(tmp_dir, ".symdex"))
+
         def _mock_db_path(repo_name: str) -> str:
             db_dir = os.path.join(tmp_dir, ".symdex")
             os.makedirs(db_dir, exist_ok=True)
