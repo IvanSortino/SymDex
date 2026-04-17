@@ -12,7 +12,7 @@ description: |
 
 Use SymDex before broad file browsing.
 Use it to save tokens by retrieving the exact code the agent needs instead of scanning whole files.
-SymDex currently covers 16 language surfaces, including Python, Go, Kotlin, Dart, Swift, and Vue script blocks.
+SymDex currently covers 17 language surfaces, including Python, Go, Kotlin, Dart, Swift, Vue script blocks, and Markdown headings plus supported fenced code blocks.
 
 ## Start Here
 

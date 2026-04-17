@@ -94,8 +94,7 @@ def test_search_found_table_output(indexed_dir):
     result = runner.invoke(app, ["search", "alpha", "--repo", indexed_dir["repo"]])
     assert result.exit_code == 0
     assert "alpha" in result.output.lower()
-    assert "Without SymDex" in result.output
-    assert "You're in good hands." in result.output
+    assert "SymDex token savings:" in result.output
 
 
 def test_normal_command_prints_update_notice_when_newer_release_exists(indexed_dir, monkeypatch):
@@ -145,7 +144,9 @@ def test_search_found_json_output(indexed_dir):
     assert "symbols" in data
     assert "roi" in data
     assert "roi_summary" in data
+    assert "roi_agent_hint" in data
     assert "token savings" in data["roi_summary"].lower()
+    assert "mention" in data["roi_agent_hint"].lower()
 
 
 def test_search_not_found_exits_1(indexed_dir):
@@ -264,8 +265,7 @@ def test_text_found_table(indexed_dir):
     result = runner.invoke(app, ["text", "alpha", "--repo", indexed_dir["repo"]])
     assert result.exit_code == 0
     assert "alpha" in result.output.lower()
-    assert "Without SymDex" in result.output
-    assert "You're in good hands." in result.output
+    assert "SymDex token savings:" in result.output
 
 
 def test_text_found_json(indexed_dir):
@@ -275,7 +275,9 @@ def test_text_found_json(indexed_dir):
     assert "matches" in data
     assert "roi" in data
     assert "roi_summary" in data
+    assert "roi_agent_hint" in data
     assert "token savings" in data["roi_summary"].lower()
+    assert "mention" in data["roi_agent_hint"].lower()
 
 
 def test_text_not_found_exits_1(indexed_dir):

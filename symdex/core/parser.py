@@ -23,6 +23,8 @@ except ImportError:  # pragma: no cover - optional fallback
 
 logger = logging.getLogger(__name__)
 
+_MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+
 # Map file extension -> (language_name, grammar_module, preferred_loader_attr)
 _EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".py":   ("python",     "tree_sitter_python", None),
@@ -47,6 +49,40 @@ _EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".kts":  ("kotlin",     "tree_sitter_kotlin", None),
     ".dart": ("dart",       None, None),
     ".swift": ("swift",     None, None),
+}
+
+_MARKDOWN_CODE_EXTS = {
+    "py": ".py",
+    "python": ".py",
+    "js": ".js",
+    "javascript": ".js",
+    "jsx": ".jsx",
+    "mjs": ".mjs",
+    "ts": ".ts",
+    "typescript": ".ts",
+    "tsx": ".tsx",
+    "go": ".go",
+    "golang": ".go",
+    "rs": ".rs",
+    "rust": ".rs",
+    "java": ".java",
+    "php": ".php",
+    "cs": ".cs",
+    "csharp": ".cs",
+    "c#": ".cs",
+    "c": ".c",
+    "cpp": ".cpp",
+    "c++": ".cpp",
+    "cc": ".cc",
+    "elixir": ".ex",
+    "ex": ".ex",
+    "ruby": ".rb",
+    "rb": ".rb",
+    "kotlin": ".kt",
+    "kt": ".kt",
+    "kts": ".kts",
+    "dart": ".dart",
+    "swift": ".swift",
 }
 # node_type → kind mapping per language
 _NODE_KINDS: dict[str, dict[str, str]] = {
@@ -303,6 +339,72 @@ def _extract_vue_script(source_bytes: bytes) -> tuple[bytes, int, str]:
     return match.group(2), match.start(2), lang_name
 
 
+def _iter_line_spans(source_bytes: bytes):
+    start = 0
+    while start < len(source_bytes):
+        newline = source_bytes.find(b"\n", start)
+        end = len(source_bytes) if newline == -1 else newline + 1
+        yield start, end, source_bytes[start:end]
+        start = end
+
+
+def _parse_markdown_heading(line: bytes) -> tuple[str, str] | None:
+    raw = line.rstrip(b"\r\n")
+    stripped = raw.lstrip(b" ")
+    if len(raw) - len(stripped) > 3:
+        return None
+    match = re.match(rb"(#{1,6})(?:[ \t]+|$)(.*)$", stripped)
+    if not match:
+        return None
+    title = match.group(2).strip()
+    title = re.sub(rb"[ \t]+#+[ \t]*$", b"", title).strip()
+    if not title:
+        return None
+    return (
+        title.decode("utf-8", errors="replace"),
+        stripped.decode("utf-8", errors="replace"),
+    )
+
+
+def _parse_markdown_fence(line: bytes) -> tuple[bytes, int, str] | None:
+    stripped = line.strip()
+    match = re.match(rb"(`{3,}|~{3,})[ \t]*([^ \t`~]*)?", stripped)
+    if not match:
+        return None
+    marker = match.group(1)
+    info = (match.group(2) or b"").decode("utf-8", errors="replace")
+    return marker[:1], len(marker), info
+
+
+def _markdown_code_extension(info: str) -> str | None:
+    token = info.strip().split(maxsplit=1)[0].lower() if info.strip() else ""
+    token = token.strip("{}")
+    if token.startswith(".") and token in _EXT_MAP:
+        return token
+    return _MARKDOWN_CODE_EXTS.get(token)
+
+
+def _markdown_docstring(section_bytes: bytes) -> str | None:
+    parts: list[str] = []
+    fence: tuple[bytes, int] | None = None
+    for _, _, line in _iter_line_spans(section_bytes):
+        parsed_fence = _parse_markdown_fence(line)
+        if parsed_fence:
+            marker, length, _ = parsed_fence
+            if fence is None:
+                fence = (marker, length)
+            elif marker == fence[0] and length >= fence[1]:
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        text = line.strip()
+        if text:
+            parts.append(text.decode("utf-8", errors="replace"))
+    docstring = " ".join(parts).strip()
+    return docstring[:500] if docstring else None
+
+
 def _parent_type(node) -> str | None:
     parent = node.parent
     return parent.type if parent is not None else None
@@ -534,48 +636,78 @@ def _walk_and_extract(
         stack.extend(reversed(node.children))
 
 
+def _parse_tree_sitter_source(source_bytes: bytes, ext: str, rel_path: str) -> list[SymbolDict]:
+    if not _TREE_SITTER_AVAILABLE:
+        return []
+
+    lang_name, language = _get_language(ext)
+    if language is None:
+        return []
+
+    try:
+        parser = TSParser(language)
+        tree = parser.parse(source_bytes)
+    except Exception as exc:
+        logger.warning("tree-sitter parse failed for %s: %s", rel_path, exc)
+        return []
+
+    results: list[SymbolDict] = []
+    _walk_and_extract(tree.root_node, source_bytes, lang_name, rel_path, results)
+    return results
+
+
+def _parse_markdown(source_bytes: bytes, rel_path: str) -> list[SymbolDict]:
+    results: list[SymbolDict] = []
+    headings: list[tuple[int, int, str, str]] = []
+    fence: tuple[bytes, int, str | None, int] | None = None
+
+    for line_start, line_end, line in _iter_line_spans(source_bytes):
+        parsed_fence = _parse_markdown_fence(line)
+        if parsed_fence:
+            marker, length, info = parsed_fence
+            if fence is None:
+                fence = (marker, length, _markdown_code_extension(info), line_end)
+            elif marker == fence[0] and length >= fence[1]:
+                _, _, code_ext, code_start = fence
+                if code_ext is not None and line_start > code_start:
+                    code_bytes = source_bytes[code_start:line_start]
+                    for sym in _parse_tree_sitter_source(code_bytes, code_ext, rel_path):
+                        sym["start_byte"] += code_start
+                        sym["end_byte"] += code_start
+                        results.append(sym)
+                fence = None
+            continue
+
+        if fence is not None:
+            continue
+
+        heading = _parse_markdown_heading(line)
+        if heading is not None:
+            name, signature = heading
+            headings.append((line_start, line_end, name, signature))
+
+    for idx, (start_byte, heading_end, name, signature) in enumerate(headings):
+        end_byte = headings[idx + 1][0] if idx + 1 < len(headings) else len(source_bytes)
+        results.append({
+            "name": name,
+            "file": rel_path,
+            "kind": "section",
+            "start_byte": start_byte,
+            "end_byte": end_byte,
+            "signature": signature,
+            "docstring": _markdown_docstring(source_bytes[heading_end:end_byte]),
+        })
+
+    return sorted(results, key=lambda sym: sym["start_byte"])
+
+
 def parse_file(file_path: str, repo_root: str) -> list[SymbolDict]:
     """Parse a source file and return a list of symbol dicts.
 
     Returns [] for unsupported extensions or parse failures. Never raises.
     """
-    if not _TREE_SITTER_AVAILABLE:
-        return []
-
     ext = os.path.splitext(file_path)[1].lower()
-
-    # Vue SFCs: extract <script> block and parse as JS/TS — no extra dependency needed.
-    if ext == ".vue":
-        try:
-            with open(file_path, "rb") as fh:
-                source_bytes = fh.read()
-        except OSError as exc:
-            logger.warning("Could not read %s: %s", file_path, exc)
-            return []
-        script_bytes, script_offset, lang_name = _extract_vue_script(source_bytes)
-        if not script_bytes.strip():
-            return []
-        _, language = _get_language(".ts" if lang_name == "typescript" else ".js")
-        if language is None:
-            return []
-        try:
-            parser = TSParser(language)
-            tree = parser.parse(script_bytes)
-        except Exception as exc:
-            logger.warning("tree-sitter parse failed for %s: %s", file_path, exc)
-            return []
-        rel_path = os.path.relpath(file_path, repo_root).replace("\\", "/")
-        results: list[SymbolDict] = []
-        _walk_and_extract(tree.root_node, script_bytes, lang_name, rel_path, results)
-        for sym in results:
-            sym["start_byte"] += script_offset
-            sym["end_byte"] += script_offset
-        return results
-
-    lang_name, language = _get_language(ext)
-
-    if language is None:
-        return []
+    rel_path = os.path.relpath(file_path, repo_root).replace("\\", "/")
 
     try:
         with open(file_path, "rb") as fh:
@@ -584,15 +716,26 @@ def parse_file(file_path: str, repo_root: str) -> list[SymbolDict]:
         logger.warning("Could not read %s: %s", file_path, exc)
         return []
 
-    try:
-        parser = TSParser(language)
-        tree = parser.parse(source_bytes)
-    except Exception as exc:
-        logger.warning("tree-sitter parse failed for %s: %s", file_path, exc)
+    if ext in _MARKDOWN_EXTENSIONS:
+        return _parse_markdown(source_bytes, rel_path)
+
+    if not _TREE_SITTER_AVAILABLE:
         return []
 
-    rel_path = os.path.relpath(file_path, repo_root).replace("\\", "/")
-    results: list[SymbolDict] = []
-    _walk_and_extract(tree.root_node, source_bytes, lang_name, rel_path, results)
-    return results
+    # Vue SFCs: extract <script> block and parse as JS/TS — no extra dependency needed.
+    if ext == ".vue":
+        script_bytes, script_offset, lang_name = _extract_vue_script(source_bytes)
+        if not script_bytes.strip():
+            return []
+        results = _parse_tree_sitter_source(
+            script_bytes,
+            ".ts" if lang_name == "typescript" else ".js",
+            rel_path,
+        )
+        for sym in results:
+            sym["start_byte"] += script_offset
+            sym["end_byte"] += script_offset
+        return results
+
+    return _parse_tree_sitter_source(source_bytes, ext, rel_path)
 

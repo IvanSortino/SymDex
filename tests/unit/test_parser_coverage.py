@@ -28,7 +28,8 @@ def test_get_language_unknown_extension():
 
 def test_get_language_import_failure():
     """Simulate a grammar module that raises on import."""
-    with patch("symdex.core.parser.importlib.import_module", side_effect=ImportError("no module")):
+    with patch.object(parser_mod, "_get_language_from_pack", None), \
+         patch("symdex.core.parser.importlib.import_module", side_effect=ImportError("no module")):
         lang_name, language = _get_language(".py")
     # lang_name is still "python" from _EXT_MAP; language is None due to the error
     assert lang_name == "python"

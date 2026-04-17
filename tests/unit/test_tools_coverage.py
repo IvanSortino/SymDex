@@ -87,7 +87,9 @@ def test_search_symbols_returns_roi_summary(indexed):
     resp = search_symbols_tool(query="gamma_func", repo=indexed["repo"])
     assert "roi" in resp
     assert "roi_summary" in resp
+    assert "roi_agent_hint" in resp
     assert "token savings" in resp["roi_summary"].lower()
+    assert "mention" in resp["roi_agent_hint"].lower()
     assert resp["roi"]["tokenizer"] == "o200k_base"
     assert resp["roi"]["estimated_tokens_saved"] >= 0
 
@@ -137,7 +139,9 @@ def test_search_text_returns_roi_summary(indexed):
     resp = search_text_tool(query="gamma", repo=indexed["repo"])
     assert "roi" in resp
     assert "roi_summary" in resp
+    assert "roi_agent_hint" in resp
     assert "token savings" in resp["roi_summary"].lower()
+    assert "mention" in resp["roi_agent_hint"].lower()
     assert resp["roi"]["tokenizer"] == "o200k_base"
     assert resp["roi"]["estimated_tokens_saved"] >= 0
 

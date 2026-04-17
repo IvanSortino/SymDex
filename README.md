@@ -143,7 +143,7 @@ symdex serve
 Notes:
 - If you omit `--repo` on `symdex index` or `symdex watch`, SymDex auto-generates a stable repo id from the current git branch and worktree path hash.
 - After indexing, SymDex prints a code summary.
-- After successful search commands, SymDex prints an approximate ROI footer with tokens read, tokens avoided, and tokens saved.
+- After successful search commands, SymDex prints a one-line ROI footer with approximate token savings.
 - When a newer PyPI release exists, normal CLI commands print exact upgrade commands for `pip`, `uv tool`, and `uvx`.
 - Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
 - `--state-dir` can be passed either globally or after the subcommand, for example `symdex --state-dir .symdex repos` or `symdex repos --state-dir .symdex`.
@@ -218,7 +218,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 | Auto-watch | Re-index on change and keep the index fresh |
 | Cross-repo registry | Manage multiple indexed repos from one local registry |
 | Workspace-local state | Keep repo databases plus `registry.json` inside `./.symdex` for Docker and portable workspaces |
-| Search ROI footer | Approximate token savings after successful search commands |
+| Search ROI footer | One-line approximate token savings after successful search commands |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
 | Optional embedding backends | Add `symdex[local]` for local embeddings or `symdex[voyage]` for hosted embeddings only when needed |
 
@@ -325,8 +325,9 @@ SymDex currently exposes 20 MCP tools:
 | Elixir | `.ex`, `.exs` |
 | Ruby | `.rb` |
 | Vue | `.vue` script blocks parsed as JavaScript or TypeScript |
+| Markdown | `.md`, `.markdown` headings plus supported fenced code blocks |
 
-Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) plus grammar fallbacks that keep mobile ecosystems covered too.
+Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for code, grammar fallbacks for mobile ecosystems, and a native Markdown scanner for headings and fenced code examples.
 
 ---
 
@@ -412,7 +413,7 @@ By default, each repo gets its own SQLite database under `~/.symdex`, plus a cen
 A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.
 
 **What do search commands print?**
-CLI search commands print an approximate ROI footer showing lines searched, tokens that would likely have been spent without SymDex, tokens used with SymDex, and tokens saved. MCP search tools return the same data as structured `roi` plus a plain-English `roi_summary` string so clients like Codex can surface it more clearly.
+CLI search commands print a one-line ROI footer showing approximate token savings. MCP search tools return structured `roi`, a concise `roi_summary`, and `roi_agent_hint` so clients can mention the savings when responding to users.
 
 **Do existing users get update notices?**
 Yes. Interactive CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.

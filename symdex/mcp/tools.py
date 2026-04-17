@@ -20,7 +20,11 @@ from symdex.core.storage import (
     upsert_repo,
     search_text_in_index,
 )
-from symdex.core.token_metrics import build_search_roi_summary_from_rows, format_search_roi_summary
+from symdex.core.token_metrics import (
+    build_search_roi_summary_from_rows,
+    format_search_roi_agent_hint,
+    format_search_roi_summary,
+)
 from symdex.search.symbol_search import search_symbols as _search_symbols
 
 
@@ -34,6 +38,14 @@ def _get_root_path(repo: str) -> str | None:
         if r["name"] == repo:
             return r["root_path"]
     return None
+
+
+def _attach_roi(response: dict, roi: dict | None) -> dict:
+    if roi is not None:
+        response["roi"] = roi
+        response["roi_summary"] = format_search_roi_summary(roi)
+        response["roi_agent_hint"] = format_search_roi_agent_hint(roi)
+    return response
 
 
 def _build_tree(root: str, prefix: str = "", depth: int = 3, current_depth: int = 0) -> str:
@@ -105,10 +117,7 @@ def search_symbols_tool(
     if not symbols:
         return _err(404, "symbol_not_found", f"No symbols matching: {query}")
     response = {"symbols": symbols}
-    if roi is not None:
-        response["roi"] = roi
-        response["roi_summary"] = format_search_roi_summary(roi)
-    return response
+    return _attach_roi(response, roi)
 
 
 def get_symbol_tool(repo: str, file: str, start_byte: int, end_byte: int) -> dict:
@@ -201,10 +210,7 @@ def search_text_tool(
     finally:
         conn.close()
     response = {"matches": matches}
-    if roi is not None:
-        response["roi"] = roi
-        response["roi_summary"] = format_search_roi_summary(roi)
-    return response
+    return _attach_roi(response, roi)
 
 
 def get_file_tree_tool(repo: str, depth: int = 3) -> dict:
@@ -293,10 +299,7 @@ def semantic_search_tool(query: str, repo: str | None = None, limit: int = 10) -
     finally:
         conn.close()
     response = {"symbols": results}
-    if roi is not None:
-        response["roi"] = roi
-        response["roi_summary"] = format_search_roi_summary(roi)
-    return response
+    return _attach_roi(response, roi)
 
 
 def get_callers_tool(name: str, repo: str) -> dict:

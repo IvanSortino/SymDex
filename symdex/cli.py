@@ -28,7 +28,11 @@ from symdex.core.storage import (
     search_text_in_index,
     upsert_repo,
 )
-from symdex.core.token_metrics import build_search_roi_summary_from_rows, format_search_roi_summary
+from symdex.core.token_metrics import (
+    build_search_roi_summary_from_rows,
+    format_search_roi_agent_hint,
+    format_search_roi_summary,
+)
 from symdex.core.updates import get_update_notice
 from symdex.search.symbol_search import search_symbols as _search_symbols
 from symdex.search.semantic import search_semantic as _search_semantic
@@ -126,17 +130,7 @@ def _repo_has_semantic_embeddings(conn, repo: str) -> bool:
 
 
 def _print_search_roi(summary: dict) -> None:
-    console.print()
-    console.print("[bold]ROI[/bold]")
-    console.print(f"Lines searched: [cyan]{summary['lines_searched']}[/cyan]")
-    console.print(
-        f"Without SymDex: ~[red]{summary['estimated_tokens_without_symdex']}[/red] tokens"
-    )
-    console.print(
-        f"With SymDex: ~[green]{summary['estimated_tokens_with_symdex']}[/green] tokens"
-    )
-    console.print(f"Saved: ~[green]{summary['estimated_tokens_saved']}[/green] tokens")
-    console.print("[italic]You're in good hands.[/italic]")
+    console.print(f"[bold green]{format_search_roi_summary(summary)}[/bold green]")
 
 
 def _stdout_is_terminal() -> bool:
@@ -186,6 +180,7 @@ def _attach_roi_payload(payload: dict, roi: dict | None) -> dict:
     if roi is not None:
         payload["roi"] = roi
         payload["roi_summary"] = format_search_roi_summary(roi)
+        payload["roi_agent_hint"] = format_search_roi_agent_hint(roi)
     return payload
 
 

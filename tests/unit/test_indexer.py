@@ -95,6 +95,21 @@ def test_index_folder_custom_name(three_file_dir):
     assert result.repo == "myproject"
 
 
+def test_index_folder_indexes_markdown_symbols_and_language(tmp_path):
+    src = tmp_path / "docs"
+    src.mkdir()
+    (src / "guide.md").write_text(
+        "# SDK Guide\n\n```python\ndef configure_client():\n    return True\n```\n",
+        encoding="utf-8",
+    )
+
+    result = index_folder(str(src), repo="docs")
+
+    assert result.indexed_count == 1
+    assert result.summary["language_distribution"]["markdown"] == 1
+    assert result.summary["symbol_count"] == 2
+
+
 def test_index_folder_creates_db_file(three_file_dir):
     result = index_folder(three_file_dir)
     assert os.path.exists(result.db_path)
@@ -102,11 +117,11 @@ def test_index_folder_creates_db_file(three_file_dir):
 
 def test_invalidate_full_repo_causes_reindex(three_file_dir):
     """After invalidating a repo, next index_folder re-indexes all files."""
-    index_folder(three_file_dir)
+    initial = index_folder(three_file_dir)
     result_skipped = index_folder(three_file_dir)
     assert result_skipped.skipped_count == 3  # confirm all skipped
 
-    repo_name = os.path.basename(three_file_dir)
+    repo_name = initial.repo
     invalidate(repo_name)
 
     result_reindexed = index_folder(three_file_dir)
@@ -115,8 +130,8 @@ def test_invalidate_full_repo_causes_reindex(three_file_dir):
 
 def test_invalidate_single_file_causes_partial_reindex(three_file_dir):
     """After invalidating one file, only that file is re-indexed."""
-    index_folder(three_file_dir)
-    repo_name = os.path.basename(three_file_dir)
+    initial = index_folder(three_file_dir)
+    repo_name = initial.repo
     invalidate(repo_name, file="a.py")
 
     result = index_folder(three_file_dir)

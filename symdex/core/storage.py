@@ -40,6 +40,8 @@ _EXT_TO_LANGUAGE = {
     ".mjs": "javascript",
     ".jsx": "javascript",
     ".tsx": "typescript",
+    ".md": "markdown",
+    ".markdown": "markdown",
 }
 
 

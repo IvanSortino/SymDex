@@ -66,6 +66,25 @@ def broken(:
     pass
 '''
 
+MARKDOWN_SOURCE = '''\
+# SDK Guide
+
+Use this guide to configure the SDK.
+
+## Python Example
+
+```python
+def configure_client(api_key: str):
+    return {"api_key": api_key}
+```
+
+## Shell Example
+
+```bash
+echo "not parsed as a symbol"
+```
+'''
+
 
 @pytest.fixture
 def py_file(tmp_path):
@@ -206,6 +225,40 @@ def test_parse_unsupported_extension_returns_empty_list(unsupported_file):
     path, root = unsupported_file
     result = parse_file(path, root)
     assert result == []
+
+
+def test_parse_markdown_headings_as_sections(tmp_path):
+    f = tmp_path / "guide.md"
+    f.write_text(MARKDOWN_SOURCE, encoding="utf-8")
+
+    symbols = parse_file(str(f), str(tmp_path))
+    sections = [s for s in symbols if s["kind"] == "section"]
+
+    assert [s["name"] for s in sections] == ["SDK Guide", "Python Example", "Shell Example"]
+    assert sections[0]["signature"] == "# SDK Guide"
+    assert "configure the SDK" in (sections[0]["docstring"] or "")
+    with open(f, "rb") as fh:
+        source_bytes = fh.read()
+    first_section = source_bytes[sections[0]["start_byte"]:sections[0]["end_byte"]].decode("utf-8")
+    assert first_section.startswith("# SDK Guide")
+    assert "## Python Example" not in first_section
+
+
+def test_parse_markdown_fenced_code_blocks_as_symbols(tmp_path):
+    f = tmp_path / "guide.md"
+    f.write_text(MARKDOWN_SOURCE, encoding="utf-8")
+
+    symbols = parse_file(str(f), str(tmp_path))
+    fn = next(s for s in symbols if s["name"] == "configure_client")
+
+    assert fn["kind"] == "function"
+    assert fn["file"] == "guide.md"
+    with open(f, "rb") as fh:
+        source_bytes = fh.read()
+    snippet = source_bytes[fn["start_byte"]:fn["end_byte"]].decode("utf-8")
+    assert snippet.startswith("def configure_client")
+    assert "api_key" in snippet
+    assert "echo" not in [s["name"] for s in symbols]
 
 
 def test_parse_file_path_is_relative_to_repo_root(py_file):
