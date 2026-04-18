@@ -6,9 +6,9 @@
 
 # SymDex
 
-**The codebase oracle AI coding agents wish every repo already had.**
+**Repo-local code intelligence for AI coding agents.**
 
-*Index once. Jump straight to the exact symbol, route, caller, callee, or file slice. Read only what you need.*
+*Index a project once, then give agents exact symbols, routes, callers, callees, file outlines, and semantic matches instead of whole files.*
 
 <br>
 
@@ -43,7 +43,7 @@ pip install symdex
 # Add local semantic search when you want the sentence-transformers backend
 pip install "symdex[local]"
 
-# Or install the local-backend CLI as an isolated tool
+# Or install the local semantic backend as an isolated CLI tool
 uv tool install "symdex[local]"
 
 # Or run without installing
@@ -66,7 +66,7 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 
 AI coding agents are useful until they have to rediscover your repo from scratch. They open whole files, grep broad patterns, miss the route handler, read the same utility twice, and spend thousands of tokens just getting oriented.
 
-SymDex gives agents a repo-local retrieval layer before they start reading code.
+SymDex gives agents a repo-local retrieval layer before they start reading code. You keep the index on your machine, choose the embedding backend only when semantic search is useful, and expose the same project map through both CLI commands and MCP tools.
 
 It indexes your project into a small local SQLite knowledge base with:
 
@@ -78,13 +78,13 @@ It indexes your project into a small local SQLite knowledge base with:
 - extracted HTTP routes
 - a registry for one repo, many repos, or many worktrees
 
-Then agents can ask for the narrow slice they need: the function, route, caller chain, file outline, or intent match. That means less blind browsing, less context waste, and answers that can explain how much token budget SymDex saved.
+Then agents can ask for the narrow slice they need: the function, route, caller chain, file outline, or intent match. That means less blind browsing, less context waste, and responses that can explain how much token budget SymDex saved.
 
 SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or point the hosted backend at Voyage, OpenAI-compatible services, Gemini, or a compatible proxy when you want remote embeddings.
 
-Current product stage as of April 18, 2026:
+Current release capabilities:
 
-- package version `0.1.25`; latest public tag `v0.1.25`
+- current release `0.1.25`; latest public tag `v0.1.25`
 - 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
 - 21 language surfaces, including HTML, CSS, Shell, Svelte, Markdown headings, and supported fenced code blocks
 - Android, Flutter, and iOS coverage through Kotlin, Dart, and Swift parser targets
@@ -103,7 +103,7 @@ Current product stage as of April 18, 2026:
 
 ## SymDex Skill For Agents
 
-Install the SymDex code-search skill to make agents use SymDex before broad file browsing:
+Install the SymDex code-search skill when you want supported agents to use SymDex before broad file browsing:
 
 ```bash
 npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --yes --global
@@ -111,12 +111,13 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 
 If you want the interactive installer instead, omit `--yes --global`.
 
-What it does:
-- checks repo/index readiness first
-- uses SymDex before Read/Grep/Glob for discovery
-- prefers symbol-level and outline-level retrieval over full-file reads
-- guides agents toward callers, callees, routes, and semantic search when those are the better fit
-- keeps the workflow centered on lower-token code retrieval instead of broad file reads
+The skill tells agents to:
+- check repo and index readiness first
+- search with SymDex before broad Read/Grep/Glob discovery
+- prefer symbol-level and outline-level retrieval over full-file reads
+- use callers, callees, routes, repo stats, and semantic search when those are the better fit
+- fall back clearly when SymDex is unavailable or when semantic embeddings have not been built
+- keep the workflow centered on lower-token code retrieval instead of broad file reads
 
 The skill lives in this repo at `skills/symdex-code-search/SKILL.md` and follows the standard `skills/<name>/SKILL.md` layout.
 

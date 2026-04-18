@@ -14,13 +14,17 @@ Use SymDex before broad file browsing.
 Use it to save tokens by retrieving the exact code the agent needs instead of scanning whole files.
 SymDex currently covers 21 language surfaces, including Python, Go, Kotlin, Dart, Swift, HTML, CSS, Shell, Vue/Svelte script blocks, and Markdown headings plus supported fenced code blocks.
 
-## Current Product Snapshot
+## Current SymDex Snapshot
 
 - Package version: `0.1.25`
-- Current tool surface: 20 MCP tools
+- Latest public tag: `v0.1.25`
+- MCP tool surface: 20 tools
+- Language coverage: 21 language surfaces, including Android/Kotlin, Flutter/Dart, iOS/Swift, HTML, CSS-family stylesheets, Shell, Vue/Svelte script blocks, Markdown headings, and supported fenced code blocks
+- Route extraction: Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
 - Search outputs: one-line CLI token-savings footers plus MCP `roi`, `roi_summary`, and `roi_agent_hint`
 - Semantic backends: local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, Gemini, and compatible proxies
-- Slow remote embedding support: `SYMDEX_EMBED_RPM` plus `symdex index --lazy` for foreground structural indexing with background embedding fill
+- Hosted embedding support: `SYMDEX_EMBED_RPM` plus `symdex index --lazy` for foreground structural indexing with background embedding fill
+- No-embedding mode: `symdex index --no-embed` skips semantic embedding work entirely
 - Watch behavior: low-memory structural refresh by default; use `symdex watch --embed` only when semantic embeddings must refresh continuously
 - State model: global `~/.symdex` by default, optional workspace-local `./.symdex` with `registry.json`
 - Markdown support: `.md`, `.markdown`, and `.mdx` headings plus supported fenced code blocks are indexed alongside source files
