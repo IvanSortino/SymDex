@@ -471,44 +471,89 @@ Notes:
 
 ## FAQ
 
-**Where are indexes stored?**
-By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. If you set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...`, SymDex keeps repo databases, `registry.db`, `registry.json`, and watcher metadata inside the current workspace instead.
+### What is SymDex?
 
-**What does indexing print?**
-A code summary with files, Lines of Code, symbol counts, routes, skipped files, errors, and language breakdown.
+SymDex is a repo-local code intelligence tool for AI coding agents. It indexes a project into a local SQLite knowledge base so agents can retrieve exact symbols, file outlines, HTTP routes, callers, callees, text matches, semantic matches, and repo summaries without reading whole files first.
 
-**What do search commands print?**
-CLI search commands print a one-line ROI footer showing approximate token savings. MCP search tools return structured `roi`, a concise `roi_summary`, and `roi_agent_hint` so clients can mention the savings when responding to users.
+### What problem does SymDex solve for AI coding agents?
 
-**Do existing users get update notices?**
-Yes. Interactive CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.
+SymDex reduces blind repo browsing. Instead of opening broad files and spending thousands of tokens on orientation, an agent can ask SymDex for the specific function, route handler, call graph edge, Markdown heading, or file outline needed for the current task.
 
-**Does semantic search require the internet?**
-Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage, OpenAI-compatible, and Gemini modes require network access unless the base URL points at a local server.
+### Is SymDex an MCP server?
 
-**Why does `symdex semantic` say my repo has no semantic embeddings?**
-That repo was indexed without an embedding backend, or kept fresh by the default low-memory watch mode. Enable the backend you want, then run `symdex index`, `symdex index --lazy`, or `symdex watch --embed` so embeddings are written into the index.
+Yes. SymDex includes an MCP server with 20 tools for indexing, symbol search, semantic search, text search, file outlines, repo outlines, route search, call graph traversal, repo stats, cache invalidation, and stale-index cleanup. It also provides CLI commands for the same repo-local retrieval workflow.
 
-**Will `symdex watch` keep a large embedding model in memory?**
-No, not by default. Watch mode refreshes the structural index without loading the local semantic model unless `--embed` is passed. It also refuses duplicate watchers for the same repo/root, can auto-exit after an idle timeout, and stores watcher metadata in the active state directory so workspace-local mode stays isolated.
+### Which AI coding agents can use SymDex?
 
-**Can I install SymDex without sentence-transformers?**
-Yes. `pip install symdex` keeps the core symbol, text, route, and call-graph features without the local embedding dependencies. Install `symdex[local]` only when you want local semantic search.
+Any MCP client that supports stdio or streamable HTTP can use SymDex. Typical setups include Codex CLI, Gemini CLI, Cursor, Windsurf, GitHub Copilot, Roo, Continue.dev, Cline, Kilo Code, Zed, OpenCode, and other MCP-compatible clients.
 
-**Can I use SymDex on multiple repos and worktrees?**
-Yes. SymDex maintains a central registry, supports explicit `--repo` names, and can auto-generate stable repo ids from the current branch and worktree path when you omit `--repo`.
+### How is SymDex different from grep, ripgrep, embeddings, or an LSP?
 
-**Why do some agent logs show `index-folder` or `list-repos` while the CLI docs say `index` and `repos`?**
-`index_folder` and `list_repos` are MCP tool names. The canonical shell commands are `symdex index` and `symdex repos`, and SymDex also accepts compatibility aliases such as `symdex index-folder` and `symdex list-repos`.
+SymDex combines exact structural search with optional semantic search. Grep and ripgrep find text; language servers provide editor-native type navigation; embedding-only systems find approximate meaning. SymDex gives agents a pre-indexed local map with symbols, byte offsets, routes, call graphs, text search, semantic search, and MCP tools in one workflow.
 
-**What happens when I delete a worktree or repo?**
-Run `symdex gc` or call `gc_stale_indexes` through MCP. SymDex removes stale registry entries and their database files.
+### Does SymDex replace a language server?
 
-**Can I exclude generated files?**
-Yes. Use `.symdexignore` at the repo root with gitignore-style patterns. Common generated/build paths are also skipped by default.
+No. SymDex is not a full type checker or automated refactoring engine. Use a language server when editor-native type reasoning or refactors matter. Use SymDex when an agent needs fast repo-local retrieval, route discovery, code outlines, semantic search, and lower-token navigation across one or more repos.
 
-**Can I use SymDex without an AI agent?**
-Yes. All core search and navigation features are available through the CLI.
+### What languages and files does SymDex index?
+
+SymDex currently covers 21 language surfaces: Python, JavaScript, TypeScript, Go, Rust, Java, Kotlin, Dart, Swift, PHP, C#, C, C++, HTML, CSS-family stylesheets, Shell, Elixir, Ruby, Vue script blocks, Svelte script blocks, and Markdown. Markdown support includes `.md`, `.markdown`, and `.mdx` headings plus supported fenced code blocks.
+
+### Can SymDex extract HTTP routes?
+
+Yes. SymDex extracts HTTP routes across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix. Agents can query routes directly instead of manually scanning routers, decorators, controllers, or framework entry points.
+
+### Does SymDex help documentation, SEO, or Generative Engine Optimization teams?
+
+Yes, when technical content depends on a codebase. Documentation, SEO, and Generative Engine Optimization (GEO) teams can use SymDex-powered agents to find SDK examples, API routes, Markdown headings, feature implementations, and source-backed answers before updating developer docs, changelogs, comparison pages, or AI-search-friendly technical content. SymDex is a code retrieval layer, not a keyword research or rank tracking tool.
+
+### Does semantic search require the internet?
+
+No, not by default. Install `symdex[local]` for local `sentence-transformers` semantic search; the model downloads once and then runs offline. Voyage, OpenAI-compatible, and Gemini embedding modes require network access unless the configured base URL points at a local server or private proxy.
+
+### Can SymDex run without semantic embeddings?
+
+Yes. `pip install symdex` keeps the core symbol, text, route, file outline, repo outline, call graph, and MCP features lean. Use `symdex index --no-embed` to skip embedding work entirely, or add embeddings later with `symdex[local]`, Voyage, OpenAI-compatible, Gemini, `symdex index --lazy`, or `symdex watch --embed`.
+
+### Why does `symdex semantic` say a repo has no semantic embeddings?
+
+That repo was indexed without an embedding backend, indexed with `--no-embed`, or kept fresh by the default low-memory watch mode. Enable the backend you want, then run `symdex index`, `symdex index --lazy`, or `symdex watch --embed` so semantic vectors are written into the index.
+
+### Will `symdex watch` keep a large embedding model in memory?
+
+No, not by default. `symdex watch` refreshes structural indexes without loading local embedding models unless `--embed` is passed. Watch mode also refuses duplicate watchers for the same repo/root, can auto-exit after idle time, and stores watcher metadata in the active state directory.
+
+### Where are SymDex indexes stored?
+
+By default, each repo gets its own SQLite database under `~/.symdex`, plus a central registry database. Set `SYMDEX_STATE_DIR=.symdex` or use `symdex --state-dir .symdex ...` to keep repo databases, `registry.db`, `registry.json`, and watcher metadata inside the current workspace.
+
+### Can SymDex work across multiple repos and worktrees?
+
+Yes. SymDex maintains a registry of indexed repos, supports explicit `--repo` names, and can auto-generate stable repo ids from the current branch and worktree path when `--repo` is omitted. Use `symdex repos` to list indexes and `symdex gc` to clean stale entries after deleting worktrees.
+
+### How does SymDex report token savings?
+
+Successful CLI search commands print a one-line ROI footer with approximate token savings. MCP search tools return structured `roi`, `roi_summary`, and `roi_agent_hint` fields so agents can mention retrieval savings in user-facing responses.
+
+### What does indexing print?
+
+After indexing, SymDex prints a code summary with file count, Lines of Code, symbol counts, route counts, skipped files, errors, and language breakdown. This helps teams confirm what was indexed before relying on search results.
+
+### Can generated files be excluded?
+
+Yes. Add a `.symdexignore` file at the repo root with gitignore-style patterns. SymDex also skips common generated, dependency, and build paths by default.
+
+### Why do some logs say `index_folder` or `list_repos` while CLI docs say `index` and `repos`?
+
+`index_folder` and `list_repos` are MCP tool names. The canonical shell commands are `symdex index` and `symdex repos`, and compatibility aliases such as `symdex index-folder` and `symdex list-repos` are also accepted.
+
+### Do existing users get update notices?
+
+Yes. Interactive CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. JSON output stays quiet so structured consumers are not broken.
+
+### Can SymDex be used without an AI agent?
+
+Yes. All core search and navigation features are available through the CLI, including symbol search, exact lookup, text search, semantic search, route search, callers, callees, outlines, repo listing, and stale-index cleanup.
 
 ---
 
