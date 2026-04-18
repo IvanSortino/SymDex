@@ -80,7 +80,7 @@ SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP f
 
 Current product stage as of April 18, 2026:
 
-- package version `0.1.23`; latest public tag `v0.1.23`
+- package version `0.1.24`; latest public tag `v0.1.24`
 - 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
 - 17 language surfaces, including Markdown headings and supported fenced code blocks
 - Android, Flutter, and iOS coverage through Kotlin, Dart, and Swift parser targets

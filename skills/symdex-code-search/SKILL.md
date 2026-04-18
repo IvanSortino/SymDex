@@ -16,7 +16,7 @@ SymDex currently covers 17 language surfaces, including Python, Go, Kotlin, Dart
 
 ## Current Product Snapshot
 
-- Package version: `0.1.23`
+- Package version: `0.1.24`
 - Current tool surface: 20 MCP tools
 - Search outputs: one-line CLI token-savings footers plus MCP `roi`, `roi_summary`, and `roi_agent_hint`
 - Semantic backends: local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, Gemini, and compatible proxies
