@@ -244,17 +244,20 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 
 ## Where SymDex Fits
 
-SymDex is built for agents that need precise repo-local retrieval without depending on an editor session, hosted index, or heavyweight service stack.
+AI codebase tools now split into a few strong categories: enterprise code search, IDE-native assistants, LSP-backed agent toolkits, repo-map systems, and whole-repo prompt packers. SymDex sits in a narrower but useful slot: a local-first retrieval layer that combines exact symbols, text search, optional semantic search, HTTP routes, callers, callees, file outlines, repo outlines, Markdown/fenced-code indexing, repo stats, token-savings hints, CLI access, and MCP access without requiring an editor session or hosted index.
 
-| Approach | Strong at | Tradeoff | Where SymDex differs |
-|---|---|---|---|
-| Editor-bound LSPs | type-aware navigation and refactors inside the editor | tied to an editor session and weak on intent search | pre-indexed, terminal-first, semantic, and route-aware |
-| LSP wrappers for agents | deeper language-server-backed analysis | heavier per-language setup and live-file coupling | one SQLite index per repo and the same interface across repos |
-| Graph-backed code indexers | graph-style architecture queries | extra backend/storage complexity | zero-infra local storage with SQLite |
-| Docker-heavy hybrid search stacks | chunked semantic search with external services | more moving parts at install and runtime | local-first workflow with simple CLI and MCP setup |
-| SymDex | fast repo-local symbol, text, semantic, route, and call-graph retrieval | not a full type checker or automated refactoring engine | optimized for precise retrieval and agent efficiency |
+That makes SymDex strongest when an agent needs a portable codebase map it can query before reading files.
 
-If you need full type-system reasoning or editor-native refactors, a language server still goes deeper. If you need pre-indexed retrieval, repo-local portability, and an MCP-friendly search layer, SymDex is the better fit.
+| Need | Common fit | Where SymDex fits |
+|---|---|---|
+| Enterprise code search across many hosted repos | Sourcegraph-style code search | SymDex is smaller and local-first; it focuses on agent retrieval from checked-out worktrees rather than enterprise code search operations |
+| IDE-native codebase chat and autocomplete | Cursor, Continue, Cody, and similar editor assistants | SymDex is editor-agnostic; agents can use the same repo index from a terminal, stdio MCP, or HTTP MCP client |
+| IDE-grade semantic retrieval and refactoring | LSP-backed tools and Serena-style agent toolkits | SymDex does not try to be a refactoring engine; it focuses on retrieval primitives agents need before deciding what to edit |
+| Whole-repo context packaging | Repomix and other prompt-packing tools | SymDex retrieves targeted slices instead of packing the whole repository into one prompt artifact |
+| Agent repo maps for coding sessions | Aider-style repository maps | SymDex exposes queryable indexes, routes, call graphs, Markdown headings, semantic search, and ROI hints rather than only a condensed map |
+| Lightweight local retrieval across code and docs | SymDex | SymDex's edge is the combined surface: CLI + MCP, SQLite indexes, 21 language surfaces, route extraction, call graphs, Markdown/MDX support, optional embeddings, low-memory watch, and workspace-local state |
+
+Use a language server when you need deep type-system reasoning or editor-native refactors. Use an enterprise code search platform when you need organization-wide search, permissions, and code monitoring. Use a prompt packer when you want to hand an entire repo snapshot to a model. Use SymDex when you want an AI coding agent to ask precise repo-local questions before it spends tokens reading files.
 
 ---
 
