@@ -110,6 +110,51 @@ def test_index_folder_indexes_markdown_symbols_and_language(tmp_path):
     assert result.summary["symbol_count"] == 2
 
 
+def test_index_folder_counts_requested_language_extensions(tmp_path):
+    src = tmp_path / "language_extensions"
+    src.mkdir()
+    files = {
+        "component.html": "<main><h1>Hello</h1></main>\n",
+        "partial.htm": "<section>Hi</section>\n",
+        "style.css": ".hero { color: red; }\n",
+        "theme.scss": ".hero { color: red; }\n",
+        "legacy.sass": ".hero { color: red; }\n",
+        "bundle.less": ".hero { color: red; }\n",
+        "screen.stylus": ".hero { color: red; }\n",
+        "screen.styl": ".hero { color: red; }\n",
+        "deploy.sh": "deploy() { echo ok; }\n",
+        "profile.bash": "function alpha() { echo ok; }\n",
+        "profile.zsh": "function alpha() { echo ok; }\n",
+        "widget.svelte": "<script>function alpha() { return 1 }</script>\n",
+        "api.cjs": "function alpha() { return 1; }\n",
+        "view.cjsx": "function alpha() { return <div/>; }\n",
+        "view.mjsx": "function alpha() { return <div/>; }\n",
+        "module.mts": "function alpha(): number { return 1; }\n",
+        "module.cts": "function alpha(): number { return 1; }\n",
+        "component.mtsx": "function alpha() { return <div/>; }\n",
+        "component.ctsx": "function alpha() { return <div/>; }\n",
+        "lib.hpp": "class Header {};\n",
+        "lib.cxx": "class Cxx {};\n",
+        "lib.hxx": "class Hxx {};\n",
+        "lib.hh": "class Hh {};\n",
+        "guide.mdx": "# Guide\n",
+    }
+    for filename, source in files.items():
+        (src / filename).write_text(source, encoding="utf-8")
+
+    result = index_folder(str(src), repo="language_extension_counts", embed=False)
+    languages = result.summary["language_distribution"]
+
+    assert languages["html"] == 2
+    assert languages["css"] == 6
+    assert languages["shell"] == 3
+    assert languages["svelte"] == 1
+    assert languages["javascript"] == 3
+    assert languages["typescript"] == 4
+    assert languages["cpp"] == 4
+    assert languages["markdown"] == 1
+
+
 def test_index_folder_creates_db_file(three_file_dir):
     result = index_folder(three_file_dir)
     assert os.path.exists(result.db_path)

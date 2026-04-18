@@ -11,6 +11,13 @@ from symdex.core.storage import get_connection, query_routes
 
 def test_route_language_map_includes_extended_web_languages():
     assert _ROUTE_LANG_MAP[".py"] == "python"
+    assert _ROUTE_LANG_MAP[".cjs"] == "javascript"
+    assert _ROUTE_LANG_MAP[".cjsx"] == "javascript"
+    assert _ROUTE_LANG_MAP[".mjsx"] == "javascript"
+    assert _ROUTE_LANG_MAP[".mts"] == "typescript"
+    assert _ROUTE_LANG_MAP[".cts"] == "typescript"
+    assert _ROUTE_LANG_MAP[".mtsx"] == "typescript"
+    assert _ROUTE_LANG_MAP[".ctsx"] == "typescript"
     assert _ROUTE_LANG_MAP[".go"] == "go"
     assert _ROUTE_LANG_MAP[".java"] == "java"
     assert _ROUTE_LANG_MAP[".kt"] == "kotlin"

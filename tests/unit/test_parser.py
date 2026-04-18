@@ -227,8 +227,9 @@ def test_parse_unsupported_extension_returns_empty_list(unsupported_file):
     assert result == []
 
 
-def test_parse_markdown_headings_as_sections(tmp_path):
-    f = tmp_path / "guide.md"
+@pytest.mark.parametrize("ext", [".md", ".markdown", ".mdx"])
+def test_parse_markdown_headings_as_sections(tmp_path, ext):
+    f = tmp_path / f"guide{ext}"
     f.write_text(MARKDOWN_SOURCE, encoding="utf-8")
 
     symbols = parse_file(str(f), str(tmp_path))
@@ -244,15 +245,16 @@ def test_parse_markdown_headings_as_sections(tmp_path):
     assert "## Python Example" not in first_section
 
 
-def test_parse_markdown_fenced_code_blocks_as_symbols(tmp_path):
-    f = tmp_path / "guide.md"
+@pytest.mark.parametrize("ext", [".md", ".markdown", ".mdx"])
+def test_parse_markdown_fenced_code_blocks_as_symbols(tmp_path, ext):
+    f = tmp_path / f"guide{ext}"
     f.write_text(MARKDOWN_SOURCE, encoding="utf-8")
 
     symbols = parse_file(str(f), str(tmp_path))
     fn = next(s for s in symbols if s["name"] == "configure_client")
 
     assert fn["kind"] == "function"
-    assert fn["file"] == "guide.md"
+    assert fn["file"] == f"guide{ext}"
     with open(f, "rb") as fh:
         source_bytes = fh.read()
     snippet = source_bytes[fn["start_byte"]:fn["end_byte"]].decode("utf-8")

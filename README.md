@@ -1,5 +1,9 @@
 <div align="center">
 
+<p>
+  <img src="docs/images/symdex-icon.svg" alt="SymDex icon" width="112" height="112" />
+</p>
+
 # SymDex
 
 **The codebase oracle AI coding agents wish every repo already had.**
@@ -80,9 +84,9 @@ SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP f
 
 Current product stage as of April 18, 2026:
 
-- package version `0.1.24`; latest public tag `v0.1.24`
+- package version `0.1.25`; latest public tag `v0.1.25`
 - 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
-- 17 language surfaces, including Markdown headings and supported fenced code blocks
+- 21 language surfaces, including HTML, CSS, Shell, Svelte, Markdown headings, and supported fenced code blocks
 - Android, Flutter, and iOS coverage through Kotlin, Dart, and Swift parser targets
 - route extraction across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
 - one-line CLI token-savings footers after successful search commands
@@ -326,8 +330,8 @@ SymDex currently exposes 20 MCP tools:
 | Language | Extensions |
 |---|---|
 | Python | `.py` |
-| JavaScript | `.js`, `.jsx`, `.mjs` |
-| TypeScript | `.ts`, `.tsx` |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs`, `.cjsx`, `.mjsx` |
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.mtsx`, `.ctsx` |
 | Go | `.go` |
 | Rust | `.rs` |
 | Java | `.java` |
@@ -337,13 +341,17 @@ SymDex currently exposes 20 MCP tools:
 | PHP | `.php` |
 | C# | `.cs` |
 | C | `.c` |
-| C++ | `.h`, `.cpp`, `.cc` |
+| C++ | `.h`, `.hh`, `.hpp`, `.hxx`, `.cpp`, `.cc`, `.cxx` |
+| HTML | `.html`, `.htm` |
+| CSS | `.css`, `.scss`, `.sass`, `.less`, `.stylus`, `.styl` |
+| Shell | `.sh`, `.bash`, `.zsh` |
 | Elixir | `.ex`, `.exs` |
 | Ruby | `.rb` |
 | Vue | `.vue` script blocks parsed as JavaScript or TypeScript |
-| Markdown | `.md`, `.markdown` headings plus supported fenced code blocks |
+| Svelte | `.svelte` script blocks parsed as JavaScript or TypeScript |
+| Markdown | `.md`, `.markdown`, `.mdx` headings plus supported fenced code blocks |
 
-Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for code, grammar fallbacks for mobile ecosystems, and a native Markdown scanner for headings and fenced code examples.
+Powered by [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for code, language-pack grammar fallbacks, and a native Markdown scanner for headings and fenced code examples.
 
 ---
 

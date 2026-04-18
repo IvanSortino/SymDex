@@ -23,16 +23,23 @@ except ImportError:  # pragma: no cover - optional fallback
 
 logger = logging.getLogger(__name__)
 
-_MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+_MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdx"}
 
 # Map file extension -> (language_name, grammar_module, preferred_loader_attr)
 _EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".py":   ("python",     "tree_sitter_python", None),
     ".js":   ("javascript", "tree_sitter_javascript", None),
+    ".cjs":  ("javascript", "tree_sitter_javascript", None),
     ".jsx":  ("javascript", "tree_sitter_javascript", None),
+    ".cjsx": ("javascript", "tree_sitter_javascript", None),
     ".mjs":  ("javascript", "tree_sitter_javascript", None),
+    ".mjsx": ("javascript", "tree_sitter_javascript", None),
     ".ts":   ("typescript", "tree_sitter_typescript", "language_typescript"),
+    ".cts":  ("typescript", "tree_sitter_typescript", "language_typescript"),
+    ".mts":  ("typescript", "tree_sitter_typescript", "language_typescript"),
     ".tsx":  ("typescript", "tree_sitter_typescript", "language_tsx"),
+    ".ctsx": ("typescript", "tree_sitter_typescript", "language_tsx"),
+    ".mtsx": ("typescript", "tree_sitter_typescript", "language_tsx"),
     ".go":   ("go",         "tree_sitter_go", None),
     ".rs":   ("rust",       "tree_sitter_rust", None),
     ".java": ("java",       "tree_sitter_java", None),
@@ -40,8 +47,25 @@ _EXT_MAP: dict[str, tuple[str, Optional[str], Optional[str]]] = {
     ".cs":   ("c_sharp",    "tree_sitter_c_sharp", None),
     ".c":    ("c",          "tree_sitter_c", None),
     ".h":    ("cpp",        "tree_sitter_cpp", None),
+    ".hh":   ("cpp",        "tree_sitter_cpp", None),
     ".cpp":  ("cpp",        "tree_sitter_cpp", None),
     ".cc":   ("cpp",        "tree_sitter_cpp", None),
+    ".cxx":  ("cpp",        "tree_sitter_cpp", None),
+    ".hpp":  ("cpp",        "tree_sitter_cpp", None),
+    ".hxx":  ("cpp",        "tree_sitter_cpp", None),
+    ".html": ("html",       None, None),
+    ".htm":  ("html",       None, None),
+    ".css":  ("css",        None, None),
+    ".scss": ("scss",       None, None),
+    ".sass": ("css",        None, None),
+    ".less": ("css",        None, None),
+    ".stylus": ("css",      None, None),
+    ".styl": ("css",        None, None),
+    ".sh":   ("bash",       None, None),
+    ".bash": ("bash",       None, None),
+    ".zsh":  ("bash",       None, None),
+    ".vue":  ("vue",        None, None),
+    ".svelte": ("svelte",   None, None),
     ".ex":   ("elixir",     "tree_sitter_elixir", None),
     ".exs":  ("elixir",     "tree_sitter_elixir", None),
     ".rb":   ("ruby",       "tree_sitter_ruby", None),
@@ -56,11 +80,18 @@ _MARKDOWN_CODE_EXTS = {
     "python": ".py",
     "js": ".js",
     "javascript": ".js",
+    "cjs": ".cjs",
     "jsx": ".jsx",
+    "cjsx": ".cjsx",
     "mjs": ".mjs",
+    "mjsx": ".mjsx",
     "ts": ".ts",
     "typescript": ".ts",
+    "cts": ".cts",
+    "mts": ".mts",
     "tsx": ".tsx",
+    "ctsx": ".ctsx",
+    "mtsx": ".mtsx",
     "go": ".go",
     "golang": ".go",
     "rs": ".rs",
@@ -74,6 +105,23 @@ _MARKDOWN_CODE_EXTS = {
     "cpp": ".cpp",
     "c++": ".cpp",
     "cc": ".cc",
+    "cxx": ".cxx",
+    "hpp": ".hpp",
+    "hxx": ".hxx",
+    "hh": ".hh",
+    "html": ".html",
+    "htm": ".htm",
+    "css": ".css",
+    "scss": ".scss",
+    "sass": ".sass",
+    "less": ".less",
+    "stylus": ".stylus",
+    "styl": ".styl",
+    "sh": ".sh",
+    "shell": ".sh",
+    "bash": ".bash",
+    "zsh": ".zsh",
+    "svelte": ".svelte",
     "elixir": ".ex",
     "ex": ".ex",
     "ruby": ".rb",
@@ -114,6 +162,7 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
         "type_declaration": "class",
     },
     "rust": {
+        "impl_item": "class",
         "function_item": "function",
         "function_signature_item": "function",
         "struct_item": "class",
@@ -142,6 +191,18 @@ _NODE_KINDS: dict[str, dict[str, str]] = {
         "function_definition": "function",
         "class_specifier": "class",
         "struct_specifier": "class",
+    },
+    "html": {
+        "element": "element",
+    },
+    "css": {
+        "rule_set": "selector",
+    },
+    "scss": {
+        "rule_set": "selector",
+    },
+    "bash": {
+        "function_definition": "function",
     },
     "elixir": {
         "def": "function",
@@ -245,11 +306,34 @@ def _extract_name(node, source_bytes: bytes) -> Optional[str]:
     name_node = node.child_by_field_name("name")
     if name_node:
         return source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+
+    if node.type == "method_signature":
+        signature_node = next((child for child in node.children if child.type == "function_signature"), None)
+        if signature_node is not None:
+            name_node = signature_node.child_by_field_name("name")
+            if name_node is not None:
+                return source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+
+    if node.type == "impl_item":
+        type_node = node.child_by_field_name("type")
+        if type_node is not None:
+            return source_bytes[type_node.start_byte:type_node.end_byte].decode("utf-8", errors="replace")
+
     # Fallback for grammars where definitions don't expose a "name" field.
     stack = list(node.children)
     while stack:
         child = stack.pop(0)
-        if child.type in ("identifier", "type_identifier", "field_identifier", "constant", "simple_identifier"):
+        if child.type in (
+            "identifier",
+            "type_identifier",
+            "field_identifier",
+            "constant",
+            "simple_identifier",
+            "tag_name",
+            "class_name",
+            "id_name",
+            "word",
+        ):
             return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
         stack.extend(list(child.children))
     return None
@@ -323,12 +407,12 @@ def _extract_elixir_symbol(node, source_bytes: bytes) -> Optional[tuple[str, str
     return kind, name
 
 
-def _extract_vue_script(source_bytes: bytes) -> tuple[bytes, int, str]:
-    """Extract the <script> block from a Vue SFC.
+def _extract_component_script(source_bytes: bytes) -> tuple[bytes, int, str]:
+    """Extract the <script> block from a single-file component.
 
     Returns (script_bytes, byte_offset, lang_name).
     byte_offset is the position of script_bytes within source_bytes so that
-    byte offsets stored in the DB remain relative to the full .vue file.
+    byte offsets stored in the DB remain relative to the full component file.
     lang_name is 'typescript' if lang="ts", otherwise 'javascript'.
     """
     match = re.search(rb"<script(\s[^>]*)?>(.+?)</script>", source_bytes, re.DOTALL | re.IGNORECASE)
@@ -722,9 +806,9 @@ def parse_file(file_path: str, repo_root: str) -> list[SymbolDict]:
     if not _TREE_SITTER_AVAILABLE:
         return []
 
-    # Vue SFCs: extract <script> block and parse as JS/TS — no extra dependency needed.
-    if ext == ".vue":
-        script_bytes, script_offset, lang_name = _extract_vue_script(source_bytes)
+    # Vue/Svelte SFCs: extract <script> block and parse as JS/TS.
+    if ext in {".vue", ".svelte"}:
+        script_bytes, script_offset, lang_name = _extract_component_script(source_bytes)
         if not script_bytes.strip():
             return []
         results = _parse_tree_sitter_source(
