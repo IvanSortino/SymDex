@@ -12,6 +12,7 @@ import pytest
 import sys
 from typer.testing import CliRunner
 from symdex.cli import app
+from symdex.core.indexer import IndexResult
 from symdex.core.naming import derive_repo_name
 
 runner = CliRunner()
@@ -187,6 +188,53 @@ def test_index_accepts_state_dir_after_subcommand(tmp_path):
     result = runner.invoke(app, ["index", str(src), "--repo", "state_repo", "--state-dir", ".symdex"])
     assert result.exit_code == 0
     assert os.environ.get("SYMDEX_STATE_DIR") == ".symdex"
+
+
+def test_index_lazy_runs_foreground_without_embeddings_and_starts_background(tmp_path, monkeypatch):
+    src = tmp_path / "lazyindex"
+    src.mkdir()
+    (src / "module.py").write_text("def lazy_name():\n    return 1\n")
+    db_path = str(tmp_path / ".symdex" / "lazy_repo.db")
+    embed_flags: list[bool] = []
+    starts: list[tuple[str, str, str | None, float, float]] = []
+
+    def fake_index_folder(path, repo=None, name=None, progress_callback=None, embed=True):
+        embed_flags.append(embed)
+        return IndexResult(
+            repo=repo or "lazy_repo",
+            db_path=db_path,
+            indexed_count=1,
+            skipped_count=0,
+            summary={
+                "file_count": 1,
+                "lines_of_code": 2,
+                "symbol_count": 1,
+                "functions": 1,
+                "classes": 0,
+                "methods": 0,
+                "constants": 0,
+                "variables": 0,
+                "routes": 0,
+                "language_distribution": {"python": 1},
+                "skipped": 0,
+                "errored": 0,
+            },
+        )
+
+    def fake_start_lazy(path, repo, state_dir=None, interval=5.0, idle_timeout=1800.0):
+        starts.append((path, repo, state_dir, interval, idle_timeout))
+        return 4321
+
+    monkeypatch.setattr("symdex.cli._index_folder", fake_index_folder)
+    monkeypatch.setattr("symdex.cli._start_lazy_embedding_watch", fake_start_lazy, raising=False)
+
+    result = runner.invoke(app, ["index", str(src), "--repo", "lazy_repo", "--lazy"])
+
+    assert result.exit_code == 0, result.output
+    assert embed_flags == [False]
+    assert starts == [(str(src), "lazy_repo", None, 5.0, 1800.0)]
+    assert "Background semantic indexing started" in result.output
+    assert "4321" in result.output
 
 
 def test_index_folder_alias_works(tmp_path):

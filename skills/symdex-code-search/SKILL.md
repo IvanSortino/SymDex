@@ -19,6 +19,8 @@ SymDex currently covers 17 language surfaces, including Python, Go, Kotlin, Dart
 - Package version: `0.1.23`
 - Current tool surface: 20 MCP tools
 - Search outputs: one-line CLI token-savings footers plus MCP `roi`, `roi_summary`, and `roi_agent_hint`
+- Semantic backends: local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, Gemini, and compatible proxies
+- Slow remote embedding support: `SYMDEX_EMBED_RPM` plus `symdex index --lazy` for foreground structural indexing with background embedding fill
 - Watch behavior: low-memory structural refresh by default; use `symdex watch --embed` only when semantic embeddings must refresh continuously
 - State model: global `~/.symdex` by default, optional workspace-local `./.symdex` with `registry.json`
 - Markdown support: `.md` and `.markdown` headings plus supported fenced code blocks are indexed alongside source files
@@ -48,6 +50,7 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - If a search tool returns `roi`, `roi_summary`, or `roi_agent_hint`, mention the approximate token savings briefly in your response.
 - If the repo uses workspace-local SymDex state (`./.symdex`), stay inside that workspace so the same index is auto-discovered.
 - Treat `symdex watch` as low-memory by default; only request `--embed` when semantic embeddings must refresh on file changes.
+- For remote embedding providers with strict request limits, prefer `symdex index --lazy` and set `SYMDEX_EMBED_RPM` instead of blocking an agent session on a long foreground embedding run.
 
 ## Tool Selection
 
@@ -110,7 +113,8 @@ When you need to edit code:
 
 - `symdex watch` refreshes structural indexes by default without loading local embedding models.
 - Use `symdex watch --embed` only when the task needs semantic search to stay fresh continuously.
-- If `semantic_search` has no embeddings, fall back to `search_symbols` or `search_text`, or re-index after enabling `symdex[local]` or a hosted embedding backend.
+- If `semantic_search` has no embeddings, fall back to `search_symbols` or `search_text`, or re-index after enabling `symdex[local]`, Voyage, OpenAI-compatible, Gemini, or another hosted embedding backend.
+- Use `symdex index --lazy` when embeddings may be slow because of hosted-model latency or RPM limits.
 - Workspace-local state keeps watcher metadata under `./.symdex`, so commands should run from that workspace or pass the matching `--state-dir`.
 
 ## Use Normal Browsing Only When Needed

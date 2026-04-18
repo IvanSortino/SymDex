@@ -6,8 +6,8 @@ import sys
 import types
 import uuid
 import shutil
-from pathlib import Path
 import pytest
+from pathlib import Path
 from unittest.mock import patch
 from symdex.search.semantic import embed_text, search_semantic, embed_for_index, embed_for_query
 from symdex.core.storage import get_connection, upsert_embedding
@@ -226,6 +226,113 @@ def test_voyage_backend_works_without_sentence_transformers_installed(monkeypatc
 
     assert vec.dtype == np.float32
     assert calls == [(["hello"], "voyage-code-3", "query", True)]
+
+
+def test_openai_compatible_backend_posts_configured_embedding_request(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    calls: list[tuple[str, dict, dict]] = []
+
+    def fake_post_json(url, headers, payload):
+        calls.append((url, headers, payload))
+        return {"data": [{"embedding": FAKE_VEC.tolist()}]}
+
+    monkeypatch.setenv("SYMDEX_EMBED_BACKEND", "openai")
+    monkeypatch.setenv("SYMDEX_EMBED_BASE_URL", "https://proxy.example.test/v1")
+    monkeypatch.setenv("SYMDEX_EMBED_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("SYMDEX_EMBED_API_KEY", "test-key")
+    monkeypatch.setattr(semantic_mod, "_post_embedding_json", fake_post_json, raising=False)
+    monkeypatch.setattr(
+        semantic_mod,
+        "_get_model",
+        lambda *args, **kwargs: pytest.fail("OpenAI-compatible backend must not load the local model"),
+    )
+
+    vec = semantic_mod.embed_for_index("hello")
+
+    assert vec.dtype == np.float32
+    assert calls == [
+        (
+            "https://proxy.example.test/v1/embeddings",
+            {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer test-key",
+            },
+            {"model": "text-embedding-3-small", "input": "hello"},
+        )
+    ]
+
+
+def test_gemini_backend_uses_retrieval_task_types(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    calls: list[tuple[str, dict, dict]] = []
+
+    def fake_post_json(url, headers, payload):
+        calls.append((url, headers, payload))
+        return {"embedding": {"values": FAKE_VEC.tolist()}}
+
+    monkeypatch.setenv("SYMDEX_EMBED_BACKEND", "gemini")
+    monkeypatch.setenv("SYMDEX_EMBED_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+    monkeypatch.setenv("SYMDEX_EMBED_MODEL", "text-embedding-004")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    monkeypatch.setattr(semantic_mod, "_post_embedding_json", fake_post_json, raising=False)
+    monkeypatch.setattr(
+        semantic_mod,
+        "_get_model",
+        lambda *args, **kwargs: pytest.fail("Gemini backend must not load the local model"),
+    )
+
+    index_vec = semantic_mod.embed_for_index("document text")
+    query_vec = semantic_mod.embed_for_query("query text")
+
+    assert index_vec.dtype == np.float32
+    assert query_vec.dtype == np.float32
+    assert calls == [
+        (
+            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=gemini-key",
+            {"Content-Type": "application/json"},
+            {
+                "content": {"parts": [{"text": "document text"}]},
+                "taskType": "RETRIEVAL_DOCUMENT",
+            },
+        ),
+        (
+            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=gemini-key",
+            {"Content-Type": "application/json"},
+            {
+                "content": {"parts": [{"text": "query text"}]},
+                "taskType": "RETRIEVAL_QUERY",
+            },
+        ),
+    ]
+
+
+def test_remote_embedding_rpm_limit_paces_requests(monkeypatch):
+    from symdex.search import semantic as semantic_mod
+
+    current_time = [10.0]
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(round(seconds, 2))
+        current_time[0] += seconds
+
+    def fake_post_json(url, headers, payload):
+        return {"data": [{"embedding": FAKE_VEC.tolist()}]}
+
+    monkeypatch.setenv("SYMDEX_EMBED_BACKEND", "openai")
+    monkeypatch.setenv("SYMDEX_EMBED_RPM", "60")
+    monkeypatch.setattr(semantic_mod, "_post_embedding_json", fake_post_json, raising=False)
+    monkeypatch.setattr(semantic_mod, "_monotonic", lambda: current_time[0], raising=False)
+    monkeypatch.setattr(semantic_mod, "_sleep", fake_sleep, raising=False)
+    monkeypatch.setattr(semantic_mod, "_last_remote_embed_at", None, raising=False)
+
+    semantic_mod.embed_for_index("first")
+    current_time[0] += 0.25
+    semantic_mod.embed_for_index("second")
+
+    assert sleeps == [0.75]
 
 
 @patch("symdex.search.semantic._get_model")

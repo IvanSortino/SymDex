@@ -149,6 +149,38 @@ def test_indexing_with_embed_false_skips_symbol_embeddings(tmp_path):
     assert rows[0]["embedding"] is None
 
 
+def test_reindex_with_embed_true_backfills_missing_embeddings_for_unchanged_files():
+    repo_dir = Path.cwd() / ".indexer_test_tmp" / uuid.uuid4().hex
+    state_dir = repo_dir / "state"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    state_dir.mkdir()
+    try:
+        (repo_dir / "foo.py").write_text(
+            'def hello():\n    """Say hello to the world."""\n    pass\n'
+        )
+        db_path = str(state_dir / "test.db")
+
+        from symdex.core.indexer import index_folder
+
+        with patch("symdex.core.storage.get_db_path", return_value=db_path):
+            with patch("symdex.core.indexer.get_db_path", return_value=db_path):
+                index_folder(str(repo_dir), name="backfill", embed=False)
+
+        with patch("symdex.search.semantic.embed_for_index", return_value=FAKE_VEC):
+            with patch("symdex.core.storage.get_db_path", return_value=db_path):
+                with patch("symdex.core.indexer.get_db_path", return_value=db_path):
+                    index_folder(str(repo_dir), name="backfill", embed=True)
+
+        conn = get_connection(db_path)
+        rows = query_symbols_with_embeddings(conn, repo="backfill")
+        conn.close()
+
+        assert len(rows) >= 1
+        assert rows[0]["embedding"] is not None
+    finally:
+        shutil.rmtree(repo_dir, ignore_errors=True)
+
+
 def test_indexing_without_embeddings_skips_semantic_import_and_keeps_symbols(tmp_path, monkeypatch):
     repo_dir = tmp_path / "repo"
     state_dir = tmp_path / "state"

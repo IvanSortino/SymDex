@@ -76,9 +76,9 @@ It indexes your project into a small local SQLite knowledge base with:
 
 Then agents can ask for the narrow slice they need: the function, route, caller chain, file outline, or intent match. That means less blind browsing, less context waste, and answers that can explain how much token budget SymDex saved.
 
-SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or use the Voyage extras when you want hosted embeddings and optional multimodal indexing.
+SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or point the hosted backend at Voyage, OpenAI-compatible services, Gemini, or a compatible proxy when you want remote embeddings.
 
-Current product stage as of April 17, 2026:
+Current product stage as of April 18, 2026:
 
 - package version `0.1.23`; latest public tag `v0.1.23`
 - 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
@@ -87,6 +87,9 @@ Current product stage as of April 17, 2026:
 - route extraction across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
 - one-line CLI token-savings footers after successful search commands
 - MCP `roi`, `roi_summary`, and `roi_agent_hint` fields so agents can mention savings in their final response
+- semantic backends for local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, and Gemini Embedding
+- `SYMDEX_EMBED_RPM` request pacing for hosted embedding providers
+- `symdex index --lazy` for fast foreground structural indexing while embeddings build in a background watcher
 - low-memory `symdex watch` by default: structural refresh without loading embedding models unless `--embed` is passed
 - duplicate watcher protection, idle auto-exit, and state-aware watcher metadata
 - workspace-local `./.symdex` state for Docker, portable workspaces, and teams that do not want indexes hidden in home directories
@@ -156,7 +159,7 @@ Notes:
 - Set `SYMDEX_STATE_DIR=.symdex` on first index to keep repo databases, `registry.db`, and `registry.json` inside the current workspace. After that, commands run from the workspace auto-discover the local state.
 - `--state-dir` can be passed either globally or after the subcommand, for example `symdex --state-dir .symdex repos` or `symdex repos --state-dir .symdex`.
 - Canonical CLI commands are `index` and `repos`. Shell compatibility aliases also accept MCP-shaped names like `index-folder`, `index-repo`, and `list-repos`.
-- Semantic search requires stored embeddings. If a repo was indexed before `symdex[local]` or Voyage was enabled, re-index it after enabling the backend you want.
+- Semantic search requires stored embeddings. If a repo was indexed before the backend you want was enabled, re-index it with `symdex index`, `symdex index --lazy`, or `symdex watch --embed`.
 
 Add to your agent config:
 
@@ -230,7 +233,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 | Search ROI footer | One-line approximate token savings after successful search commands |
 | Agent ROI hint | MCP tools return `roi_agent_hint` so agents can mention savings naturally in their replies |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
-| Optional embedding backends | Add `symdex[local]` for local embeddings or `symdex[voyage]` for hosted embeddings only when needed |
+| Optional embedding backends | Use local embeddings, Voyage, OpenAI-compatible `/embeddings`, Gemini, or a compatible proxy only when needed |
 
 ---
 
@@ -256,6 +259,8 @@ If you need full type-system reasoning or editor-native refactors, a language se
 # Indexing and maintenance
 symdex index ./myproject --repo myproject       # Index with an explicit repo id
 symdex index ./myproject                        # Auto-name from git branch + path hash
+symdex index ./myproject --repo myproject --no-embed  # Skip semantic embedding work
+symdex index ./myproject --repo myproject --lazy      # Index code now, embed in a background watcher
 symdex watch ./myproject --repo myproject       # Keep an index fresh without loading embedding models
 symdex watch ./myproject --repo myproject --embed  # Also refresh semantic embeddings on change
 symdex invalidate --repo myproject              # Force re-index of a repo
@@ -363,7 +368,7 @@ SymDex works with any MCP client that supports stdio or streamable HTTP.
 
 ---
 
-## Voyage AI embeddings
+## Semantic embedding backends
 
 Base `symdex` installs the lean core only. Choose the embedding extra that matches how you want semantic search to work:
 
@@ -371,9 +376,19 @@ Base `symdex` installs the lean core only. Choose the embedding extra that match
 - `symdex[voyage]` for Voyage text embeddings
 - `symdex[voyage-multimodal]` for Voyage text plus images and PDFs
 
-Voyage AI is the hosted backend for users who want to offload embedding work to the cloud.
+Remote OpenAI-compatible and Gemini backends use the Python standard library HTTP client, so they do not add a required dependency.
 
-### Text mode
+### Local mode
+
+```bash
+pip install "symdex[local]"
+
+SYMDEX_EMBED_BACKEND=local \
+SYMDEX_EMBED_MODEL=all-MiniLM-L6-v2 \
+symdex index . --repo myrepo
+```
+
+### Voyage text mode
 
 ```bash
 pip install "symdex[voyage]"
@@ -388,7 +403,34 @@ VOYAGE_API_KEY=... \
 symdex semantic "parse source code" --repo myrepo
 ```
 
-### Multimodal mode
+### OpenAI-compatible mode
+
+Use this for OpenAI, local OpenAI-compatible servers, and proxy services that expose `POST /embeddings`.
+
+```bash
+SYMDEX_EMBED_BACKEND=openai \
+SYMDEX_EMBED_BASE_URL=https://api.openai.com/v1 \
+SYMDEX_EMBED_MODEL=text-embedding-3-small \
+SYMDEX_EMBED_API_KEY=... \
+SYMDEX_EMBED_RPM=60 \
+symdex index . --repo myrepo --lazy
+```
+
+For a local or proxy provider, set `SYMDEX_EMBED_BACKEND=custom`, point `SYMDEX_EMBED_BASE_URL` at its `/v1` base URL, and set the model name it expects. If the provider does not need an API key, omit `SYMDEX_EMBED_API_KEY`.
+
+### Gemini mode
+
+Gemini uses `RETRIEVAL_DOCUMENT` when indexing and `RETRIEVAL_QUERY` when searching.
+
+```bash
+SYMDEX_EMBED_BACKEND=gemini \
+GEMINI_API_KEY=... \
+SYMDEX_EMBED_MODEL=text-embedding-004 \
+SYMDEX_EMBED_RPM=60 \
+symdex index . --repo myrepo --lazy
+```
+
+### Voyage multimodal mode
 
 ```bash
 pip install "symdex[voyage-multimodal]"
@@ -404,10 +446,15 @@ Multimodal mode lets SymDex index supported images, screenshots, and PDFs as sea
 
 Notes:
 - Base `symdex` keeps symbol, text, route, and call-graph features without pulling in the local embedding stack.
-- Voyage is opt-in. If `SYMDEX_EMBED_BACKEND` is unset, SymDex keeps using the local backend when `symdex[local]` is installed.
+- If `SYMDEX_EMBED_BACKEND` is unset, SymDex uses the local backend when `symdex[local]` is installed.
 - Local semantic search requires `symdex[local]` and downloads the model on first use.
 - Voyage text mode requires `symdex[voyage]`.
 - Voyage multimodal mode requires `symdex[voyage-multimodal]`.
+- OpenAI-compatible mode reads `SYMDEX_EMBED_BASE_URL`, `SYMDEX_EMBED_MODEL`, and optional `SYMDEX_EMBED_API_KEY` or `OPENAI_API_KEY`.
+- Gemini mode reads `SYMDEX_EMBED_MODEL`, `SYMDEX_EMBED_BASE_URL`, and `SYMDEX_EMBED_API_KEY`, `GEMINI_API_KEY`, or `GOOGLE_API_KEY`.
+- `SYMDEX_EMBED_RPM` applies request pacing to remote backends. Use it when free tiers or proxies enforce requests-per-minute limits.
+- `symdex index --lazy` performs the fast structural index first, then starts a background `symdex watch --embed` process so embeddings can fill in without blocking the foreground command.
+- `symdex index --no-embed` skips semantic embedding work entirely.
 - If the selected backend extra is missing, SymDex prints an actionable install hint.
 - Multimodal indexing is only active when `SYMDEX_VOYAGE_MULTIMODAL=1`.
 
@@ -428,10 +475,10 @@ CLI search commands print a one-line ROI footer showing approximate token saving
 Yes. Interactive CLI commands can print a brief upgrade notice with exact commands for `pip`, `uv tool`, and `uvx`. `--json` output stays quiet so structured consumers are not broken.
 
 **Does semantic search require the internet?**
-Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage mode requires `symdex[voyage]` or `symdex[voyage-multimodal]`, network access, and a `VOYAGE_API_KEY`.
+Not by default. Install `symdex[local]` for the local backend; it downloads its model once and then runs offline. Voyage, OpenAI-compatible, and Gemini modes require network access unless the base URL points at a local server.
 
 **Why does `symdex semantic` say my repo has no semantic embeddings?**
-That repo was indexed without an embedding backend, or kept fresh by the default low-memory watch mode. Install `symdex[local]` for local embeddings or enable Voyage, then run `symdex index` or `symdex watch --embed` so embeddings are written into the index.
+That repo was indexed without an embedding backend, or kept fresh by the default low-memory watch mode. Enable the backend you want, then run `symdex index`, `symdex index --lazy`, or `symdex watch --embed` so embeddings are written into the index.
 
 **Will `symdex watch` keep a large embedding model in memory?**
 No, not by default. Watch mode refreshes the structural index without loading the local semantic model unless `--embed` is passed. It also refuses duplicate watchers for the same repo/root, can auto-exit after an idle timeout, and stores watcher metadata in the active state directory so workspace-local mode stays isolated.

@@ -5,6 +5,7 @@
 import json
 import importlib.metadata
 import os
+import subprocess
 import sys
 from typing import Optional
 
@@ -159,6 +160,66 @@ def _maybe_print_update_notice(argv: list[str] | None = None, json_output: bool 
     console.print()
 
 
+def _build_lazy_watch_command(
+    path: str,
+    repo: str,
+    state_dir: Optional[str] = None,
+    interval: float = 5.0,
+    idle_timeout: float = 1800.0,
+) -> list[str]:
+    command = [
+        sys.executable,
+        "-m",
+        "symdex.cli",
+        "watch",
+        path,
+        "--repo",
+        repo,
+        "--embed",
+        "--interval",
+        f"{interval:g}",
+        "--idle-timeout",
+        f"{idle_timeout:g}",
+    ]
+    if state_dir:
+        command.extend(["--state-dir", state_dir])
+    return command
+
+
+def _start_lazy_embedding_watch(
+    path: str,
+    repo: str,
+    state_dir: Optional[str] = None,
+    interval: float = 5.0,
+    idle_timeout: float = 1800.0,
+) -> int:
+    abs_path = os.path.abspath(path)
+    effective_state_dir = os.path.abspath(state_dir) if state_dir else None
+    command = _build_lazy_watch_command(
+        abs_path,
+        repo,
+        state_dir=effective_state_dir,
+        interval=interval,
+        idle_timeout=idle_timeout,
+    )
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
+    process = subprocess.Popen(
+        command,
+        cwd=abs_path,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=os.name != "nt",
+        creationflags=creationflags,
+    )
+    return int(process.pid)
+
+
 def _search_roi_summary(repo: str, rows: list[dict], result_kind: str) -> dict | None:
     root = _repo_root(repo)
     if not root or not rows:
@@ -200,6 +261,26 @@ def index(
         "--state-dir",
         help="State directory for SymDex indexes and registry (for example .symdex)",
     ),
+    embed: bool = typer.Option(
+        True,
+        "--embed/--no-embed",
+        help="Build semantic embeddings during the foreground index.",
+    ),
+    lazy: bool = typer.Option(
+        False,
+        "--lazy",
+        help="Index code now and build semantic embeddings in a background watcher.",
+    ),
+    lazy_interval: float = typer.Option(
+        5.0,
+        "--lazy-interval",
+        help="Seconds between background lazy re-index cycles.",
+    ),
+    lazy_idle_timeout: float = typer.Option(
+        1800.0,
+        "--lazy-idle-timeout",
+        help="Stop the lazy background watcher after this many idle seconds.",
+    ),
 ) -> None:
     """Index a folder and register it."""
     _apply_state_dir_override(state_dir)
@@ -207,7 +288,13 @@ def index(
     if not os.path.isdir(path):
         err_console.print(f"[red]Error:[/red] Path does not exist: {path}")
         raise typer.Exit(code=1)
-    result = _index_folder(path, repo=repo, progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"))
+    foreground_embed = embed and not lazy
+    result = _index_folder(
+        path,
+        repo=repo,
+        progress_callback=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+        embed=foreground_embed,
+    )
     upsert_repo(result.repo, root_path=os.path.abspath(path), db_path=result.db_path)
     table = Table(title="Index Result")
     table.add_column("Repo", style="cyan")
@@ -220,6 +307,18 @@ def index(
     _print_code_summary(result.summary)
     console.print(f"[dim]Registry DB:[/dim] {get_registry_path()}")
     console.print(f"[dim]Registry JSON:[/dim] {get_registry_json_path()}")
+    if lazy:
+        pid = _start_lazy_embedding_watch(
+            path,
+            result.repo,
+            state_dir=state_dir,
+            interval=lazy_interval,
+            idle_timeout=lazy_idle_timeout,
+        )
+        console.print(
+            "[green]Background semantic indexing started[/green] "
+            f"for [cyan]{result.repo}[/cyan] (pid {pid})."
+        )
 
 
 @app.command()
@@ -424,8 +523,8 @@ def semantic(
             err_console.print(
                 "[red]Error:[/red] "
                 f"Repo has no semantic embeddings: {repo}. "
-                'Re-index after installing `symdex[local]` or enabling '
-                "`SYMDEX_EMBED_BACKEND=voyage`."
+                "Enable an embedding backend, then run `symdex index`, "
+                "`symdex index --lazy`, or `symdex watch --embed`."
             )
             raise typer.Exit(code=1)
         try:

@@ -134,6 +134,14 @@ def _index_asset_file(
         raise
 
 
+def _file_has_missing_symbol_embeddings(conn, repo: str, file_path: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM symbols WHERE repo=? AND file=? AND embedding IS NULL LIMIT 1",
+        (repo, file_path),
+    ).fetchone()
+    return row is not None
+
+
 _SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv",
     ".tox", "dist", "build", ".mypy_cache", ".pytest_cache",
@@ -252,6 +260,13 @@ def index_folder(
 
                 stored_hash = get_file_hash(conn, repo, rel_file)
                 if stored_hash == current_hash:
+                    if embed and _file_has_missing_symbol_embeddings(conn, repo, rel_file):
+                        _embed_symbols(
+                            conn,
+                            repo=repo,
+                            file_path=rel_file,
+                            progress_callback=progress_callback,
+                        )
                     skipped += 1
                     continue
 
