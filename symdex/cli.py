@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from symdex.core.context_pack import build_context_pack
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
 from symdex.core.quality import attach_quality_to_items
 from symdex.core.watcher import WatcherAlreadyRunningError, watch as _watch_repo
@@ -600,6 +601,76 @@ def semantic(
     roi = _search_roi_summary(repo, results, "symbol")
     if roi is not None:
         _print_search_roi(roi)
+
+
+@app.command()
+def pack(
+    query: str = typer.Argument(..., help="Question or topic to build context for"),
+    repo: str = typer.Option(..., "--repo", "-r", help="Repo name"),
+    budget: int = typer.Option(6000, "--budget", "-b", help="Approximate token budget"),
+    include: Optional[str] = typer.Option(None, "--include", help="Comma-separated pack sections to include"),
+    exclude: Optional[str] = typer.Option(None, "--exclude", help="Comma-separated pack sections to exclude"),
+    output_format: str = typer.Option("text", "--format", help="Output format: text or json"),
+    state_dir: Optional[str] = typer.Option(
+        None,
+        "--state-dir",
+        help="State directory for SymDex indexes and registry (for example .symdex)",
+    ),
+) -> None:
+    """Build a token-budgeted context pack for an agent query."""
+    _apply_state_dir_override(state_dir)
+    json_output = output_format.lower() == "json"
+    _maybe_print_update_notice(sys.argv[1:], json_output=json_output)
+    if output_format.lower() not in {"text", "json"}:
+        err_console.print("[red]Error:[/red] --format must be 'text' or 'json'")
+        raise typer.Exit(code=1)
+    _require_indexed_repo(repo)
+    try:
+        payload = build_context_pack(
+            repo=repo,
+            query=query,
+            token_budget=budget,
+            include=include,
+            exclude=exclude,
+        )
+    except ValueError as exc:
+        err_console.print(f"[red]Error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+    if json_output:
+        typer.echo(json.dumps(payload))
+        return
+
+    budget_info = payload["budget"]
+    table = Table(title="Context Pack")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value")
+    table.add_row("Repo", payload["repo"])
+    table.add_row("Query", payload["query"])
+    table.add_row(
+        "Tokens",
+        f"{budget_info['estimated_tokens']} used / {budget_info['available_tokens']} available",
+    )
+    table.add_row("Selected", str(len(payload["selected_evidence"])))
+    table.add_row("Omitted", str(len(payload["omitted_candidates"])))
+    console.print(table)
+
+    evidence = Table(title="Selected Evidence")
+    evidence.add_column("Type", style="magenta")
+    evidence.add_column("File")
+    evidence.add_column("Title", style="cyan")
+    evidence.add_column("Tokens", style="green")
+    for item in payload["selected_evidence"]:
+        evidence.add_row(
+            item.get("type", ""),
+            item.get("file", ""),
+            str(item.get("title", "")),
+            str(item.get("estimated_tokens", 0)),
+        )
+    console.print(evidence)
+
+    if payload["warnings"]:
+        for warning in payload["warnings"]:
+            console.print(f"[yellow]Warning:[/yellow] {escape(str(warning))}")
 
 
 @app.command()

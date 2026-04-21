@@ -26,6 +26,7 @@ def test_server_registers_expected_tools():
         "get_callers",
         "get_callees",
         "search_routes",
+        "build_context_pack",
         "gc_stale_indexes",
         "get_index_status",
         "get_repo_stats",

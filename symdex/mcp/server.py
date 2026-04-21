@@ -32,6 +32,7 @@ from symdex.mcp.tools import (
     get_repo_stats_tool,
     get_graph_diagram_tool,
     find_circular_deps_tool,
+    build_context_pack_tool,
 )
 
 mcp = FastMCP("symdex-mcp")
@@ -117,6 +118,25 @@ def search_routes(
     limit: int = 50,
 ) -> dict:
     return search_routes_tool(repo=repo, method=method, path_contains=path_contains, limit=limit)
+
+
+@mcp.tool(name="build_context_pack", description="Build a token-budgeted context pack for an agent query.")
+def build_context_pack(
+    repo: str,
+    query: str,
+    token_budget: int = 6000,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+    format: str = "json",
+) -> dict:
+    return build_context_pack_tool(
+        repo=repo,
+        query=query,
+        token_budget=token_budget,
+        include=include,
+        exclude=exclude,
+        format=format,
+    )
 
 
 @mcp.tool(name="gc_stale_indexes", description="Remove stale index databases for repos whose directories no longer exist on disk.")

@@ -4,6 +4,7 @@
 
 import os
 
+from symdex.core.context_pack import build_context_pack
 from symdex.core.indexer import index_folder as _index_folder, invalidate
 from symdex.core.quality import attach_quality_to_items
 from symdex.core.storage import (
@@ -381,6 +382,32 @@ def search_routes_tool(
     finally:
         conn.close()
     return {"routes": rows}
+
+
+def build_context_pack_tool(
+    repo: str,
+    query: str,
+    token_budget: int = 6000,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+    format: str = "json",
+) -> dict:
+    if not query:
+        return _err(400, "invalid_request", "query must be a non-empty string")
+    if format not in {"json", "text"}:
+        return _err(400, "invalid_request", "format must be 'json' or 'text'")
+    if _get_root_path(repo) is None:
+        return _err(404, "repo_not_indexed", f"Repo not indexed: {repo}")
+    try:
+        return build_context_pack(
+            repo=repo,
+            query=query,
+            token_budget=token_budget,
+            include=include,
+            exclude=exclude,
+        )
+    except ValueError as exc:
+        return _err(400, "invalid_request", str(exc))
 
 
 def gc_stale_indexes_tool() -> dict:
