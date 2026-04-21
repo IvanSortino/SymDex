@@ -66,7 +66,7 @@ def indexed_dir(tmp_path):
         '    pass\n'
     )
     # Index via CLI so the registry is populated
-    result = runner.invoke(app, ["index", str(src), "--repo", "cov_repo"])
+    result = runner.invoke(app, ["index", str(src), "--repo", "cov_repo", "--no-embed"])
     assert result.exit_code == 0, f"index failed: {result.output}"
     return {"path": str(src), "repo": "cov_repo"}
 

@@ -8,6 +8,7 @@
 import os
 import pytest
 from symdex.mcp.tools import (
+    get_file_outline_tool,
     get_symbol_tool,
     get_file_tree_tool,
     get_symbols_tool,
@@ -94,6 +95,13 @@ def test_search_symbols_returns_roi_summary(indexed):
     assert resp["roi"]["estimated_tokens_saved"] >= 0
 
 
+def test_search_symbols_returns_quality(indexed):
+    resp = search_symbols_tool(query="gamma_func", repo=indexed["repo"])
+    assert resp["symbols"][0]["quality"]["confidence"] == 0.92
+    assert resp["symbols"][0]["quality"]["parser_mode"] == "tree_sitter"
+    assert resp["symbols"][0]["quality"]["index_fresh"] in (True, False)
+
+
 # ── get_symbol_tool ───────────────────────────────────────────────────────────
 
 def test_get_symbol_invalid_bytes_order(indexed):
@@ -111,6 +119,16 @@ def test_get_symbol_file_not_found(indexed):
     resp = get_symbol_tool(repo=indexed["repo"], file="no_file.py", start_byte=0, end_byte=10)
     assert resp["error"]["code"] == 404
     assert resp["error"]["key"] == "file_not_found"
+
+
+def test_get_file_outline_returns_quality(indexed):
+    resp = get_file_outline_tool(repo=indexed["repo"], file="mod.py")
+    assert "symbols" in resp
+    assert resp["symbols"][0]["quality"]["confidence"] == 0.90
+    assert (
+        resp["symbols"][0]["quality"]["confidence_reason"]
+        == "file outline from indexed symbols"
+    )
 
 
 # ── search_text_tool ──────────────────────────────────────────────────────────
@@ -144,6 +162,12 @@ def test_search_text_returns_roi_summary(indexed):
     assert "mention" in resp["roi_agent_hint"].lower()
     assert resp["roi"]["tokenizer"] == "o200k_base"
     assert resp["roi"]["estimated_tokens_saved"] >= 0
+
+
+def test_search_text_returns_quality(indexed):
+    resp = search_text_tool(query="gamma", repo=indexed["repo"])
+    assert resp["matches"][0]["quality"]["confidence"] == 0.70
+    assert resp["matches"][0]["quality"]["parser_mode"] == "fallback_text"
 
 
 # ── get_file_tree_tool ────────────────────────────────────────────────────────
@@ -224,6 +248,30 @@ def test_semantic_search_found(indexed):
     # Embeddings may or may not be populated; tool should return symbols list or empty
     resp = semantic_search_tool(query="gamma function", repo=indexed["repo"])
     assert "symbols" in resp or "error" in resp
+
+
+def test_semantic_search_returns_quality(indexed, monkeypatch):
+    def fake_search_semantic(conn, query, repo, limit=10):
+        return [
+            {
+                "name": "gamma_func",
+                "file": "mod.py",
+                "kind": "function",
+                "start_byte": 0,
+                "end_byte": 20,
+                "score": 0.81,
+            }
+        ]
+
+    monkeypatch.setattr("symdex.search.semantic.search_semantic", fake_search_semantic)
+
+    resp = semantic_search_tool(query="gamma function", repo=indexed["repo"])
+
+    assert resp["symbols"][0]["quality"]["confidence"] == 0.81
+    assert (
+        resp["symbols"][0]["quality"]["confidence_reason"]
+        == "semantic embedding similarity"
+    )
 
 
 # ── get_callers_tool ──────────────────────────────────────────────────────────

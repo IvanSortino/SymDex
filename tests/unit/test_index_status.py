@@ -109,6 +109,29 @@ def test_get_index_status_returns_fields():
         assert resp["watcher_active"] is False  # No watcher running in test
 
 
+def test_get_index_status_includes_quality_summary():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src = Path(tmpdir) / "statusquality"
+        src.mkdir()
+        mod_path = src / "mod.py"
+        mod_path.write_text("def hello():\n    return 'hello'\n")
+        past = time.time() - 10
+        os.utime(mod_path, (past, past))
+
+        result = index_folder_tool(path=str(src), name="quality_status_repo")
+        assert "indexed" in result
+
+        resp = get_index_status_tool(repo="quality_status_repo")
+
+        assert "quality" in resp
+        assert resp["quality"]["index_fresh"] is True
+        assert resp["quality"]["has_embeddings"] in (True, False)
+        assert (
+            resp["quality"]["confidence_reason"]
+            == "index status from registry and files table"
+        )
+
+
 def test_get_index_status_uses_local_state_watch_pid_path():
     """watcher_active should follow SYMDEX_STATE_DIR instead of the legacy global path."""
     with tempfile.TemporaryDirectory() as tmpdir:

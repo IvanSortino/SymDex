@@ -198,6 +198,7 @@ def test_get_stale_repos_excludes_live_repo(tmp_path, patched_registry):
     live_dir = tmp_path / "live"
     live_dir.mkdir()
     db_file = str(tmp_path / "live.db")
+    get_connection(db_file).close()
     upsert_repo("live-repo", root_path=str(live_dir), db_path=db_file)
     stale = get_stale_repos()
     names = [r["name"] for r in stale]

@@ -15,15 +15,18 @@ from rich.markup import escape
 from rich.table import Table
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate as _invalidate
+from symdex.core.quality import attach_quality_to_items
 from symdex.core.watcher import WatcherAlreadyRunningError, watch as _watch_repo
 from symdex.core.storage import (
     get_connection,
     get_db_path,
+    get_index_status,
     get_registry_json_path,
     get_registry_path,  # noqa: F401 — imported for monkeypatching
     get_stale_repos,
     query_file_symbols,
     query_repos,
+    query_repo_has_embeddings,
     query_routes,
     remove_repo,
     search_text_in_index,
@@ -245,6 +248,19 @@ def _attach_roi_payload(payload: dict, roi: dict | None) -> dict:
     return payload
 
 
+def _quality_context_for_cli(repo: str) -> tuple[bool, dict | None]:
+    conn = get_connection(get_db_path(repo))
+    try:
+        has_embeddings = query_repo_has_embeddings(conn, repo)
+    finally:
+        conn.close()
+    try:
+        status = get_index_status(repo, get_db_path(repo))
+    except Exception:  # noqa: BLE001
+        status = None
+    return has_embeddings, status
+
+
 @app.command()
 def index(
     path: str = typer.Argument(..., help="Directory to index"),
@@ -351,6 +367,9 @@ def search(
         err_console.print(f"[red]Error:[/red] No symbols found matching: {query}")
         raise typer.Exit(code=1)
     if json_output:
+        if repo:
+            has_embeddings, status = _quality_context_for_cli(repo)
+            symbols = attach_quality_to_items(symbols, "symbol", has_embeddings, status)
         payload = {"symbols": symbols}
         if repo:
             roi = _search_roi_summary(repo, symbols, "symbol")
@@ -399,6 +418,8 @@ def find(
         err_console.print(f"[red]Error:[/red] Symbol not found: {name}")
         raise typer.Exit(code=1)
     if json_output:
+        has_embeddings, status = _quality_context_for_cli(repo)
+        symbols = attach_quality_to_items(symbols, "symbol", has_embeddings, status)
         payload = {"symbols": symbols}
         roi = _search_roi_summary(repo, symbols, "symbol")
         _attach_roi_payload(payload, roi)
@@ -440,6 +461,8 @@ def outline(
         err_console.print(f"[red]Error:[/red] No symbols found in: {file}")
         raise typer.Exit(code=1)
     if json_output:
+        has_embeddings, status = _quality_context_for_cli(repo)
+        symbols = attach_quality_to_items(symbols, "outline", has_embeddings, status)
         typer.echo(json.dumps({"symbols": symbols}))
         return
     table = Table(title=f"Outline: {file}")
@@ -480,6 +503,8 @@ def text(
         err_console.print(f"[red]Error:[/red] No matches found for: {query}")
         raise typer.Exit(code=1)
     if json_output:
+        has_embeddings, status = _quality_context_for_cli(repo)
+        matches = attach_quality_to_items(matches, "text", has_embeddings, status)
         payload = {"matches": matches}
         roi = _search_roi_summary(repo, matches, "text")
         _attach_roi_payload(payload, roi)
@@ -517,13 +542,26 @@ def semantic(
         err_console.print("[red]Error:[/red] --repo is required")
         raise typer.Exit(code=1)
     _require_indexed_repo(repo)
+    backend = os.environ.get("SYMDEX_EMBED_BACKEND", "local").strip().lower()
+    if (
+        backend == "local"
+        and "sentence_transformers" in sys.modules
+        and sys.modules["sentence_transformers"] is None
+    ):
+        local_extra = escape("symdex[local]")
+        err_console.print(
+            f'[red]Error:[/red] The local semantic backend requires `{local_extra}`. '
+            f'Install it with `pip install "{local_extra}"`.'
+        )
+        raise typer.Exit(code=1)
     conn = get_connection(get_db_path(repo))
     try:
         if not _repo_has_semantic_embeddings(conn, repo):
+            local_extra = escape("symdex[local]")
             err_console.print(
                 "[red]Error:[/red] "
                 f"Repo has no semantic embeddings: {repo}. "
-                "Enable an embedding backend, then run `symdex index`, "
+                f"Install `{local_extra}` or enable another embedding backend, then run `symdex index`, "
                 "`symdex index --lazy`, or `symdex watch --embed`."
             )
             raise typer.Exit(code=1)
@@ -544,6 +582,8 @@ def semantic(
         err_console.print(f"[red]Error:[/red] No semantic matches found for: {query}")
         raise typer.Exit(code=1)
     if json_output:
+        has_embeddings, status = _quality_context_for_cli(repo)
+        results = attach_quality_to_items(results, "semantic", has_embeddings, status)
         payload = {"symbols": results}
         roi = _search_roi_summary(repo, results, "symbol")
         _attach_roi_payload(payload, roi)
@@ -848,7 +888,15 @@ def index_folder_alias(
     ),
 ) -> None:
     """Compatibility alias for MCP-style shell usage."""
-    index(path=path, repo=repo, state_dir=state_dir)
+    index(
+        path=path,
+        repo=repo,
+        state_dir=state_dir,
+        embed=True,
+        lazy=False,
+        lazy_interval=5.0,
+        lazy_idle_timeout=1800.0,
+    )
 
 
 @app.command("index-repo", hidden=True)
@@ -869,7 +917,15 @@ def index_repo_alias(
     ),
 ) -> None:
     """Compatibility alias for MCP-style shell usage."""
-    index(path=path, repo=repo, state_dir=state_dir)
+    index(
+        path=path,
+        repo=repo,
+        state_dir=state_dir,
+        embed=True,
+        lazy=False,
+        lazy_interval=5.0,
+        lazy_idle_timeout=1800.0,
+    )
 
 
 @app.command("list-repos", hidden=True)

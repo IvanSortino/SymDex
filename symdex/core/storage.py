@@ -411,6 +411,14 @@ def query_symbols_with_embeddings(
     return [dict(r) for r in rows]
 
 
+def query_repo_has_embeddings(conn: sqlite3.Connection, repo: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM symbols WHERE repo=? AND embedding IS NOT NULL LIMIT 1",
+        (repo,),
+    ).fetchone()
+    return row is not None
+
+
 def upsert_route(
     conn: sqlite3.Connection,
     repo: str,
@@ -529,6 +537,7 @@ def get_index_status(repo: str, db_path: str) -> dict:
     - age_seconds: float (seconds since last_indexed, or None)
     - stale: bool (True if any file's mtime > last_indexed, False otherwise)
     - watcher_active: bool (True if a watcher metadata file exists for the active state)
+    - quality: dict (retrieval quality summary for the index status payload)
     """
     import datetime
 
@@ -612,6 +621,7 @@ def get_index_status(repo: str, db_path: str) -> dict:
         # Check if watcher is active
         watch_pid_path = pathlib.Path(get_watch_pid_path(repo))
         watcher_active = watch_pid_path.exists()
+        has_embeddings = query_repo_has_embeddings(conn, repo)
 
     finally:
         conn.close()
@@ -625,6 +635,19 @@ def get_index_status(repo: str, db_path: str) -> dict:
         "age_seconds": age_seconds,
         "stale": stale,
         "watcher_active": watcher_active,
+        "quality": {
+            "confidence": 0.90,
+            "confidence_reason": "index status from registry and files table",
+            "index_fresh": not stale,
+            "last_indexed": last_indexed_str,
+            "parser_mode": None,
+            "language_surface": None,
+            "is_generated": None,
+            "is_ignored": None,
+            "ignored_reason": None,
+            "has_embeddings": has_embeddings,
+            "route_confidence": None,
+        },
     }
 
 

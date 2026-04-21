@@ -14,8 +14,11 @@ def test_routes_help():
 
 
 def test_routes_command_no_routes(tmp_path, monkeypatch):
+    from symdex.core.storage import upsert_repo
+
     monkeypatch.setattr("symdex.core.storage.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))
     monkeypatch.setattr("symdex.cli.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))
+    upsert_repo("empty_repo", root_path=str(tmp_path), db_path=str(tmp_path / "empty_repo.db"))
     runner = CliRunner()
     result = runner.invoke(app, ["routes", "empty_repo"])
     assert result.exit_code == 0
@@ -23,10 +26,11 @@ def test_routes_command_no_routes(tmp_path, monkeypatch):
 
 
 def test_routes_command_shows_route(tmp_path, monkeypatch):
-    from symdex.core.storage import get_connection, upsert_route
+    from symdex.core.storage import get_connection, upsert_repo, upsert_route
     db_path = str(tmp_path / "myapp.db")
     monkeypatch.setattr("symdex.core.storage.get_db_path", lambda repo: db_path)
     monkeypatch.setattr("symdex.cli.get_db_path", lambda repo: db_path)
+    upsert_repo("myapp", root_path=str(tmp_path), db_path=db_path)
 
     conn = get_connection(db_path)
     upsert_route(conn, repo="myapp", file="api.py", method="GET",

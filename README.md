@@ -76,13 +76,14 @@ It indexes your project into a small local SQLite knowledge base with:
 - optional semantic search
 - callers, callees, and circular dependency checks
 - extracted HTTP routes
+- retrieval quality metadata for freshness, confidence, parser mode, generated paths, and embedding availability
 - a registry for one repo, many repos, or many worktrees
 
 Then agents can ask for the narrow slice they need: the function, route, caller chain, file outline, or intent match. That means less blind browsing, less context waste, and responses that can explain how much token budget SymDex saved.
 
 SymDex is local-first. Base `symdex` keeps symbol, text, route, graph, and MCP features lean. Install `symdex[local]` only when you want local semantic embeddings, or point the hosted backend at Voyage, OpenAI-compatible services, Gemini, or a compatible proxy when you want remote embeddings.
 
-Current release capabilities:
+Current product capabilities in this checkout:
 
 - current release `0.1.25`; latest public tag `v0.1.25`
 - 20 MCP tools across indexing, search, outlines, routes, stats, graphs, cache invalidation, and stale-index cleanup
@@ -91,6 +92,7 @@ Current release capabilities:
 - route extraction across Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
 - one-line CLI token-savings footers after successful search commands
 - MCP `roi`, `roi_summary`, and `roi_agent_hint` fields so agents can mention savings in their final response
+- MCP and CLI JSON `quality` fields so agents can judge confidence, index freshness, parser mode, generated paths, and embedding availability before reasoning from a result
 - semantic backends for local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, and Gemini Embedding
 - `SYMDEX_EMBED_RPM` request pacing for hosted embedding providers
 - `symdex index --lazy` for fast foreground structural indexing while embeddings build in a background watcher
@@ -237,6 +239,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 | Workspace-local state | Keep repo databases, `registry.json`, and watcher metadata inside `./.symdex` for Docker and portable workspaces |
 | Search ROI footer | One-line approximate token savings after successful search commands |
 | Agent ROI hint | MCP tools return `roi_agent_hint` so agents can mention savings naturally in their replies |
+| Retrieval quality metadata | MCP and CLI JSON outputs expose confidence, freshness, parser mode, language surface, generated-file hints, and embedding availability |
 | Code summary | Files, Lines of Code, symbols, routes, skipped files, and languages after indexing |
 | Optional embedding backends | Use local embeddings, Voyage, OpenAI-compatible `/embeddings`, Gemini, or a compatible proxy only when needed |
 
@@ -244,7 +247,7 @@ After the local state exists, SymDex auto-discovers it from the current workspac
 
 ## Where SymDex Fits
 
-AI codebase tools now split into a few strong categories: enterprise code search, IDE-native assistants, LSP-backed agent toolkits, repo-map systems, and whole-repo prompt packers. SymDex sits in a narrower but useful slot: a local-first retrieval layer that combines exact symbols, text search, optional semantic search, HTTP routes, callers, callees, file outlines, repo outlines, Markdown/fenced-code indexing, repo stats, token-savings hints, CLI access, and MCP access without requiring an editor session or hosted index.
+AI codebase tools now split into a few strong categories: enterprise code search, IDE-native assistants, LSP-backed agent toolkits, repo-map systems, and whole-repo prompt packers. SymDex sits in a narrower but useful slot: a local-first retrieval layer that combines exact symbols, text search, optional semantic search, HTTP routes, callers, callees, file outlines, repo outlines, Markdown/fenced-code indexing, repo stats, token-savings hints, retrieval quality metadata, CLI access, and MCP access without requiring an editor session or hosted index.
 
 That makes SymDex strongest when an agent needs a portable codebase map it can query before reading files.
 
@@ -254,8 +257,8 @@ That makes SymDex strongest when an agent needs a portable codebase map it can q
 | IDE-native codebase chat and autocomplete | Cursor, Continue, Cody, and similar editor assistants | SymDex is editor-agnostic; agents can use the same repo index from a terminal, stdio MCP, or HTTP MCP client |
 | IDE-grade semantic retrieval and refactoring | LSP-backed tools and Serena-style agent toolkits | SymDex does not try to be a refactoring engine; it focuses on retrieval primitives agents need before deciding what to edit |
 | Whole-repo context packaging | Repomix and other prompt-packing tools | SymDex retrieves targeted slices instead of packing the whole repository into one prompt artifact |
-| Agent repo maps for coding sessions | Aider-style repository maps | SymDex exposes queryable indexes, routes, call graphs, Markdown headings, semantic search, and ROI hints rather than only a condensed map |
-| Lightweight local retrieval across code and docs | SymDex | SymDex's edge is the combined surface: CLI + MCP, SQLite indexes, 21 language surfaces, route extraction, call graphs, Markdown/MDX support, optional embeddings, low-memory watch, and workspace-local state |
+| Agent repo maps for coding sessions | Aider-style repository maps | SymDex exposes queryable indexes, routes, call graphs, Markdown headings, semantic search, ROI hints, and retrieval quality metadata rather than only a condensed map |
+| Lightweight local retrieval across code and docs | SymDex | SymDex's edge is the combined surface: CLI + MCP, SQLite indexes, 21 language surfaces, route extraction, call graphs, Markdown/MDX support, retrieval quality signals, optional embeddings, low-memory watch, and workspace-local state |
 
 Use a language server when you need deep type-system reasoning or editor-native refactors. Use an enterprise code search platform when you need organization-wide search, permissions, and code monitoring. Use a prompt packer when you want to hand an entire repo snapshot to a model. Use SymDex when you want an AI coding agent to ask precise repo-local questions before it spends tokens reading files.
 
@@ -482,6 +485,10 @@ SymDex is a repo-local code intelligence tool for AI coding agents. It indexes a
 
 SymDex reduces blind repo browsing. Instead of opening broad files and spending thousands of tokens on orientation, an agent can ask SymDex for the specific function, route handler, call graph edge, Markdown heading, or file outline needed for the current task.
 
+### Can SymDex help agents find bugs or check code logic?
+
+Yes, as a code-comprehension and evidence layer. SymDex does not prove bugs by itself and is not a full static analyzer. It helps an agent investigate logic by retrieving exact definitions, callers, callees, routes, file outlines, text matches, semantic matches, and documentation anchors, then attaching quality metadata so the agent can see whether the evidence is fresh, parser-backed, generated, or missing embeddings before making a claim.
+
 ### Is SymDex an MCP server?
 
 Yes. SymDex includes an MCP server with 20 tools for indexing, symbol search, semantic search, text search, file outlines, repo outlines, route search, call graph traversal, repo stats, cache invalidation, and stale-index cleanup. It also provides CLI commands for the same repo-local retrieval workflow.
@@ -492,7 +499,7 @@ Any MCP client that supports stdio or streamable HTTP can use SymDex. Typical se
 
 ### How is SymDex different from grep, ripgrep, embeddings, or an LSP?
 
-SymDex combines exact structural search with optional semantic search. Grep and ripgrep find text; language servers provide editor-native type navigation; embedding-only systems find approximate meaning. SymDex gives agents a pre-indexed local map with symbols, byte offsets, routes, call graphs, text search, semantic search, and MCP tools in one workflow.
+SymDex combines exact structural search with optional semantic search. Grep and ripgrep find text; language servers provide editor-native type navigation; embedding-only systems find approximate meaning. SymDex gives agents a pre-indexed local map with symbols, byte offsets, routes, call graphs, text search, semantic search, quality metadata, and MCP tools in one workflow.
 
 ### Does SymDex replace a language server?
 
@@ -537,6 +544,10 @@ Yes. SymDex maintains a registry of indexed repos, supports explicit `--repo` na
 ### How does SymDex report token savings?
 
 Successful CLI search commands print a one-line ROI footer with approximate token savings. MCP search tools return structured `roi`, `roi_summary`, and `roi_agent_hint` fields so agents can mention retrieval savings in user-facing responses.
+
+### What are SymDex retrieval quality signals?
+
+MCP results and CLI JSON outputs include a `quality` object with fields such as `confidence`, `confidence_reason`, `index_fresh`, `last_indexed`, `parser_mode`, `language_surface`, `is_generated`, `has_embeddings`, and `route_confidence`. Agents can use those fields to avoid over-trusting stale indexes, fallback text matches, generated files, or semantic searches from repos without embeddings.
 
 ### What does indexing print?
 

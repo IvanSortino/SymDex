@@ -26,6 +26,25 @@ def test_search_routes_tool_returns_routes(tmp_path, monkeypatch):
     assert result["routes"][0]["path"] == "/users"
 
 
+def test_search_routes_tool_returns_quality(tmp_path, monkeypatch):
+    from symdex.core.storage import get_connection, upsert_route
+
+    monkeypatch.setattr("symdex.mcp.tools.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))
+    monkeypatch.setattr("symdex.core.storage.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))
+
+    db_path = str(tmp_path / "myapp.db")
+    conn = get_connection(db_path)
+    upsert_route(conn, repo="myapp", file="api.py", method="GET",
+                 path="/users", handler="list_users", start_byte=0, end_byte=100)
+    conn.commit()
+    conn.close()
+
+    from symdex.mcp.tools import search_routes_tool
+    result = search_routes_tool(repo="myapp", method=None, path_contains=None)
+    assert result["routes"][0]["quality"]["route_confidence"] == 0.85
+    assert result["routes"][0]["quality"]["parser_mode"] == "regex_route"
+
+
 def test_search_routes_tool_empty(tmp_path, monkeypatch):
     monkeypatch.setattr("symdex.mcp.tools.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))
     monkeypatch.setattr("symdex.core.storage.get_db_path", lambda repo: str(tmp_path / f"{repo}.db"))

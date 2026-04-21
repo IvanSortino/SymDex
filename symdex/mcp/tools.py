@@ -5,6 +5,7 @@
 import os
 
 from symdex.core.indexer import index_folder as _index_folder, invalidate
+from symdex.core.quality import attach_quality_to_items
 from symdex.core.storage import (
     get_connection,
     get_db_path,
@@ -16,6 +17,7 @@ from symdex.core.storage import (
     get_stale_repos,
     query_file_symbols,
     query_repos,
+    query_repo_has_embeddings,
     remove_repo,
     upsert_repo,
     search_text_in_index,
@@ -46,6 +48,15 @@ def _attach_roi(response: dict, roi: dict | None) -> dict:
         response["roi_summary"] = format_search_roi_summary(roi)
         response["roi_agent_hint"] = format_search_roi_agent_hint(roi)
     return response
+
+
+def _quality_context(conn, repo: str) -> tuple[bool, dict | None]:
+    has_embeddings = query_repo_has_embeddings(conn, repo)
+    try:
+        status = get_index_status(repo, get_db_path(repo))
+    except Exception:  # noqa: BLE001
+        status = None
+    return has_embeddings, status
 
 
 def _build_tree(root: str, prefix: str = "", depth: int = 3, current_depth: int = 0) -> str:
@@ -104,6 +115,8 @@ def search_symbols_tool(
     conn = get_connection(get_db_path(repo))
     try:
         symbols = _search_symbols(conn, repo=repo, query=query, kind=kind, limit=limit)
+        has_embeddings, status = _quality_context(conn, repo)
+        symbols = attach_quality_to_items(symbols, "symbol", has_embeddings, status)
         root = _get_root_path(repo) or ""
         roi = build_search_roi_summary_from_rows(
             conn,
@@ -151,6 +164,8 @@ def get_file_outline_tool(repo: str, file: str) -> dict:
     conn = get_connection(get_db_path(repo))
     try:
         symbols = query_file_symbols(conn, repo, file)
+        has_embeddings, status = _quality_context(conn, repo)
+        symbols = attach_quality_to_items(symbols, "outline", has_embeddings, status)
     finally:
         conn.close()
     if not symbols:
@@ -200,6 +215,8 @@ def search_text_tool(
         matches = search_text_in_index(
             conn, repo=repo, query=query, repo_root=root, file_pattern=file_pattern
         )
+        has_embeddings, status = _quality_context(conn, repo)
+        matches = attach_quality_to_items(matches, "text", has_embeddings, status)
         roi = build_search_roi_summary_from_rows(
             conn,
             repo=repo,
@@ -286,6 +303,8 @@ def semantic_search_tool(query: str, repo: str | None = None, limit: int = 10) -
     conn = get_connection(get_db_path(repo))
     try:
         results = search_semantic(conn, query=query, repo=repo, limit=limit)
+        has_embeddings, status = _quality_context(conn, repo)
+        results = attach_quality_to_items(results, "semantic", has_embeddings, status)
         root = _get_root_path(repo) or ""
         roi = build_search_roi_summary_from_rows(
             conn,
@@ -357,6 +376,8 @@ def search_routes_tool(
     try:
         rows = query_routes(conn, repo=repo, method=method,
                             path_contains=path_contains, limit=limit)
+        has_embeddings, status = _quality_context(conn, repo)
+        rows = attach_quality_to_items(rows, "route", has_embeddings, status)
     finally:
         conn.close()
     return {"routes": rows}

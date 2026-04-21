@@ -22,6 +22,7 @@ SymDex currently covers 21 language surfaces, including Python, Go, Kotlin, Dart
 - Language coverage: 21 language surfaces, including Android/Kotlin, Flutter/Dart, iOS/Swift, HTML, CSS-family stylesheets, Shell, Vue/Svelte script blocks, Markdown headings, and supported fenced code blocks
 - Route extraction: Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
 - Search outputs: one-line CLI token-savings footers plus MCP `roi`, `roi_summary`, and `roi_agent_hint`
+- Quality outputs: MCP results and CLI JSON include `quality` with confidence, freshness, parser mode, language surface, generated-file hints, and embedding availability
 - Semantic backends: local `sentence-transformers`, Voyage, OpenAI-compatible `/embeddings`, Gemini, and compatible proxies
 - Hosted embedding support: `SYMDEX_EMBED_RPM` plus `symdex index --lazy` for foreground structural indexing with background embedding fill
 - No-embedding mode: `symdex index --no-embed` skips semantic embedding work entirely
@@ -52,6 +53,7 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - Read full files only when editing, reviewing unsupported or generated content, or when SymDex cannot answer.
 - Optimize for lower-token retrieval, not broad context loading.
 - If a search tool returns `roi`, `roi_summary`, or `roi_agent_hint`, mention the approximate token savings briefly in your response.
+- Inspect `quality` before reasoning from a result. Prefer fresh, parser-backed, high-confidence evidence; warn the user when evidence is stale, generated, fallback text, or missing embeddings.
 - If the repo uses workspace-local SymDex state (`./.symdex`), stay inside that workspace so the same index is auto-discovered.
 - Treat `symdex watch` as low-memory by default; only request `--embed` when semantic embeddings must refresh on file changes.
 - For remote embedding providers with strict request limits, prefer `symdex index --lazy` and set `SYMDEX_EMBED_RPM` instead of blocking an agent session on a long foreground embedding run.
@@ -82,8 +84,9 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 2. Index with `index_folder` if needed.
 3. Start with `search_symbols`, `semantic_search`, or `search_text`.
 4. Narrow to `get_symbol` or `get_file_outline`.
-5. Use `get_callers`, `get_callees`, `search_routes`, or `get_repo_stats` for deeper analysis.
-6. Fall back to direct file reads only when SymDex cannot answer precisely enough.
+5. Check `quality` fields on returned items before making code-understanding claims.
+6. Use `get_callers`, `get_callees`, `search_routes`, or `get_repo_stats` for deeper analysis.
+7. Fall back to direct file reads only when SymDex cannot answer precisely enough.
 
 ## Decision Guide
 
@@ -104,6 +107,18 @@ If SymDex is unavailable or indexing fails, say so clearly and fall back to norm
 - "Search for the code that parses webhook payloads"
 - "Find the HTTP route for `/api/checkout`"
 - "Give me the repo summary before I edit anything"
+- "Find the code path that might explain this bug"
+- "Check whether this logic is coherent across callers and callees"
+
+## Bug And Logic Investigation
+
+Use SymDex as evidence retrieval, not as proof by itself.
+
+1. Start with the symptom, route, function, or text clue.
+2. Retrieve the exact symbol, route, caller chain, callee chain, and relevant docs.
+3. Inspect `quality.index_fresh`, `quality.confidence`, `quality.parser_mode`, `quality.is_generated`, and `quality.has_embeddings`.
+4. If evidence quality is weak, say what is missing before claiming a bug.
+5. Cite the concrete symbol, file, route, or call edge behind any bug hypothesis.
 
 ## Editing
 
@@ -134,4 +149,5 @@ When you need to edit code:
 - [ ] Index freshness checked
 - [ ] SymDex tool chosen before broad file reads
 - [ ] Exact symbol or file outline used before whole-file reads when possible
+- [ ] Quality metadata inspected before logic or bug claims
 - [ ] Direct file reads used only when SymDex could not answer cleanly
