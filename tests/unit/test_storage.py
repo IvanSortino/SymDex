@@ -5,6 +5,7 @@
 import sqlite3
 import tempfile
 import os
+import datetime
 import pytest
 from symdex.core.storage import (
     get_connection,
@@ -139,6 +140,27 @@ def test_get_db_path_returns_symdex_dir():
     path = get_db_path("myrepo")
     assert path.endswith("myrepo.db")
     assert ".symdex" in path
+
+
+def test_current_timestamp_uses_timezone_aware_utc(monkeypatch):
+    from symdex.core import storage as storage_mod
+
+    calls = []
+
+    class FakeDateTime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            calls.append(tz)
+            return cls(2026, 4, 21, 1, 2, 3, tzinfo=tz)
+
+        @classmethod
+        def utcnow(cls):  # pragma: no cover - should not be called
+            raise AssertionError("utcnow is deprecated; use timezone-aware UTC")
+
+    monkeypatch.setattr(storage_mod.datetime, "datetime", FakeDateTime)
+
+    assert storage_mod._current_timestamp() == "2026-04-21 01:02:03"
+    assert calls == [datetime.UTC]
 
 
 def test_search_text_in_index_finds_matches(tmp_path):

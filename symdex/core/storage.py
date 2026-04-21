@@ -277,7 +277,7 @@ def get_registry_json_path() -> str:
 
 
 def _current_timestamp() -> str:
-    return datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _normalize_repo_row(row: dict, resolve_paths: bool = True) -> dict:
