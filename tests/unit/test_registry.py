@@ -31,7 +31,7 @@ def test_upsert_repo_stores_root_path():
     upsert_repo("myrepo", root_path="/some/path", db_path="/some/.symdex/myrepo.db")
     repos = query_repos()
     match = next(r for r in repos if r["name"] == "myrepo")
-    assert match["root_path"] == "/some/path"
+    assert match["root_path"] == os.path.normpath(os.path.abspath("/some/path"))
 
 
 def test_upsert_repo_updates_existing():
@@ -40,7 +40,7 @@ def test_upsert_repo_updates_existing():
     repos = query_repos()
     matches = [r for r in repos if r["name"] == "myrepo"]
     assert len(matches) == 1
-    assert matches[0]["root_path"] == "/new"
+    assert matches[0]["root_path"] == os.path.normpath(os.path.abspath("/new"))
 
 
 def test_upsert_repo_multiple_repos():

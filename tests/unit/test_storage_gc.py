@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from symdex.core.indexer import index_folder
-from symdex.core.storage import get_db_path, get_stale_repos
+from symdex.core.storage import get_db_path, get_stale_repos, upsert_repo
 
 
 def test_get_stale_repos_detects_missing_db(tmp_path, monkeypatch):
@@ -18,6 +18,7 @@ def test_get_stale_repos_detects_missing_db(tmp_path, monkeypatch):
     (project / "module.py").write_text("def alpha():\n    return 1\n", encoding="utf-8")
 
     result = index_folder(str(project), repo="stale_repo")
+    upsert_repo(result.repo, root_path=str(project), db_path=result.db_path)
 
     db_path = get_db_path("stale_repo")
     assert os.path.isfile(db_path)

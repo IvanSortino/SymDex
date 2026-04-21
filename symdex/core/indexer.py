@@ -316,7 +316,7 @@ def index_folder(
                             progress_callback=progress_callback,
                         )
                     sym_rows = conn.execute(
-                        "SELECT id, name, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
+                        "SELECT id, name, kind, start_byte, end_byte FROM symbols WHERE repo=? AND file=?",
                         (repo, rel_file),
                     ).fetchall()
                     _extract_edges(conn, repo=repo, file_path=rel_file, abs_file=abs_file, symbols=[dict(r) for r in sym_rows])

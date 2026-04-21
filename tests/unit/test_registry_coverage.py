@@ -54,7 +54,7 @@ def test_register_repo_stores_root_path():
     register_repo("reg_test_repo2", root_path="/tmp/reg2")
     repos = query_repos()
     match = next(r for r in repos if r["name"] == "reg_test_repo2")
-    assert match["root_path"] == "/tmp/reg2"
+    assert match["root_path"] == os.path.normpath(os.path.abspath("/tmp/reg2"))
 
 
 # ── list_all_repos ─────────────────────────────────────────────────────────────

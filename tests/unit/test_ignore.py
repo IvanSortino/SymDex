@@ -47,7 +47,7 @@ def test_normal_file_not_excluded():
 def test_indexer_skips_ignored_files(tmp_path, monkeypatch):
     """Test that the indexer respects ignore patterns."""
     from symdex.core.indexer import index_folder
-    from symdex.core.storage import get_connection, get_db_path
+    from symdex.core.storage import get_connection
 
     # Monkeypatch get_db_path to use tmp_path for isolation
     def _mock_db_path(repo_name: str) -> str:
@@ -58,42 +58,45 @@ def test_indexer_skips_ignored_files(tmp_path, monkeypatch):
     monkeypatch.setattr("symdex.core.indexer.get_db_path", _mock_db_path)
     monkeypatch.setattr("symdex.core.storage.get_db_path", _mock_db_path)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a Python file in a normal directory
-        src_dir = os.path.join(tmpdir, "src")
-        os.makedirs(src_dir)
-        main_py = os.path.join(src_dir, "main.py")
-        with open(main_py, "w") as f:
-            f.write("def hello():\n    return 'world'\n")
+    tmpdir = tmp_path / "project"
+    tmpdir.mkdir()
+    root = str(tmpdir)
 
-        # Create a .symdexignore to exclude a pattern
-        symdexignore_path = os.path.join(tmpdir, ".symdexignore")
-        with open(symdexignore_path, "w") as f:
-            f.write("ignored/\n")
+    # Create a Python file in a normal directory
+    src_dir = os.path.join(root, "src")
+    os.makedirs(src_dir)
+    main_py = os.path.join(src_dir, "main.py")
+    with open(main_py, "w") as f:
+        f.write("def hello():\n    return 'world'\n")
 
-        # Create a file in the ignored directory
-        ignored_dir = os.path.join(tmpdir, "ignored")
-        os.makedirs(ignored_dir)
-        ignored_py = os.path.join(ignored_dir, "ignored.py")
-        with open(ignored_py, "w") as f:
-            f.write("def secret():\n    pass\n")
+    # Create a .symdexignore to exclude a pattern
+    symdexignore_path = os.path.join(root, ".symdexignore")
+    with open(symdexignore_path, "w") as f:
+        f.write("ignored/\n")
 
-        # Index the folder
-        result = index_folder(tmpdir, name="test-ignore")
+    # Create a file in the ignored directory
+    ignored_dir = os.path.join(root, "ignored")
+    os.makedirs(ignored_dir)
+    ignored_py = os.path.join(ignored_dir, "ignored.py")
+    with open(ignored_py, "w") as f:
+        f.write("def secret():\n    pass\n")
 
-        # Query the database to check what was indexed
-        db_path = get_db_path("test-ignore")
-        conn = get_connection(db_path)
-        try:
-            indexed_files = conn.execute(
-                "SELECT path FROM files WHERE repo=?", ("test-ignore",)
-            ).fetchall()
-            indexed_paths = [row["path"] for row in indexed_files]
+    # Index the folder
+    result = index_folder(root, name="test-ignore")
 
-            # src/main.py should be indexed
-            assert "src/main.py" in indexed_paths, f"Expected src/main.py in {indexed_paths}"
+    # Query the database to check what was indexed
+    db_path = _mock_db_path("test-ignore")
+    conn = get_connection(db_path)
+    try:
+        indexed_files = conn.execute(
+            "SELECT path FROM files WHERE repo=?", ("test-ignore",)
+        ).fetchall()
+        indexed_paths = [row["path"] for row in indexed_files]
 
-            # ignored/ignored.py should NOT be indexed
-            assert "ignored/ignored.py" not in indexed_paths, f"Did not expect ignored/ignored.py in {indexed_paths}"
-        finally:
-            conn.close()
+        # src/main.py should be indexed
+        assert "src/main.py" in indexed_paths, f"Expected src/main.py in {indexed_paths}"
+
+        # ignored/ignored.py should NOT be indexed
+        assert "ignored/ignored.py" not in indexed_paths, f"Did not expect ignored/ignored.py in {indexed_paths}"
+    finally:
+        conn.close()

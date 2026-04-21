@@ -79,7 +79,10 @@ def serialize_registry_value(path: str, state: StatePaths) -> str:
     if not state.local_mode:
         return absolute
 
-    relative = os.path.relpath(absolute, state.workspace_root).replace("\\", "/")
+    try:
+        relative = os.path.relpath(absolute, state.workspace_root).replace("\\", "/")
+    except ValueError:
+        return absolute
     if relative == ".":
         return "."
     if relative.startswith(".."):

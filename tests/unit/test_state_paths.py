@@ -15,6 +15,7 @@ from symdex.core.state import (
 def test_get_state_paths_defaults_to_global(tmp_path, monkeypatch):
     monkeypatch.delenv("SYMDEX_STATE_DIR", raising=False)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("symdex.core.state.discover_local_state_dir", lambda start_path=None: None)
 
     state = get_state_paths()
 
@@ -74,6 +75,7 @@ def test_registry_value_round_trip_for_local_state(tmp_path, monkeypatch):
 def test_watch_pid_path_defaults_to_legacy_global_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("SYMDEX_STATE_DIR", raising=False)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("symdex.core.state.discover_local_state_dir", lambda start_path=None: None)
 
     expected_dir = os.path.join(os.path.expanduser("~"), ".symdex-mcp")
 
