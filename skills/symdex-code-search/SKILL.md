@@ -16,8 +16,8 @@ SymDex currently covers 21 language surfaces, including Python, Go, Kotlin, Dart
 
 ## Current SymDex Snapshot
 
-- Package version: `0.1.25`
-- Latest public tag: `v0.1.25`
+- Package version: `0.1.26`
+- Latest public tag: `v0.1.26`
 - MCP tool surface: 21 tools
 - Language coverage: 21 language surfaces, including Android/Kotlin, Flutter/Dart, iOS/Swift, HTML, CSS-family stylesheets, Shell, Vue/Svelte script blocks, Markdown headings, and supported fenced code blocks
 - Route extraction: Python, JavaScript/TypeScript, Spring/Kotlin, Laravel, Gin-style Go, ASP.NET, Rails/Sinatra, Phoenix, and Actix
