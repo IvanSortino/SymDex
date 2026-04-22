@@ -1,14 +1,14 @@
 <div align="center">
 
 <p>
-  <img src="docs/images/symdex-icon.svg" alt="SymDex icon" width="112" height="112" />
+  <img src="docs/images/symdex-social-banner.jpg" alt="SymDex social banner showing symbolic indexing for agentic AI systems with entities, relations, context, a symbolic index, retrieval engine, and storage layer" width="100%" />
 </p>
 
 # SymDex
 
-**Repo-local code intelligence for AI coding agents.**
+**Symbolic indexing for agentic AI systems.**
 
-*Index a project once, then give agents exact symbols, routes, callers, callees, file outlines, semantic matches, and token-budgeted context packs instead of whole files.*
+*SymDex turns a checked-out repository into a local symbolic index of code structure, routes, relations, docs, tests, and context so AI coding agents can reason, retrieve, and act without reading whole files first.*
 
 <br>
 
@@ -30,11 +30,8 @@
 
 <br>
 
-<h2 align="center">7,500 tokens -> 200 tokens</h2>
-<p align="center"><strong>Per lookup. Every lookup. Approximate, but directionally real.</strong></p>
-<p align="center">
-  <img src="docs/images/symdex-hero-16x9.png" alt="SymDex hero visual showing token reduction and code intelligence workflow" width="100%" />
-</p>
+<h2 align="center">From whole-file browsing to exact repo retrieval</h2>
+<p align="center"><strong>Exact symbols, routes, callers, callees, file outlines, semantic matches, and token-budgeted context packs for coding agents.</strong></p>
 
 ```bash
 # Install the lean core
@@ -63,6 +60,8 @@ npx skills add https://github.com/husnainpk/SymDex --skill symdex-code-search --
 ---
 
 ## What SymDex Does
+
+SymDex is a repo-local symbolic indexing engine for AI coding agents. It maps a project into exact symbols, files, routes, relations, docs, tests, and retrieval context, then exposes that map through CLI commands and MCP tools.
 
 AI coding agents are useful until they have to rediscover your repo from scratch. They open whole files, grep broad patterns, miss the route handler, read the same utility twice, and spend thousands of tokens just getting oriented.
 
@@ -489,7 +488,7 @@ Notes:
 
 ### What is SymDex?
 
-SymDex is a repo-local code intelligence tool for AI coding agents. It indexes a project into a local SQLite knowledge base so agents can retrieve exact symbols, file outlines, HTTP routes, callers, callees, text matches, semantic matches, token-budgeted context packs, and repo summaries without reading whole files first.
+SymDex is a repo-local symbolic indexing engine for AI coding agents. It indexes a project into a local SQLite knowledge base so agents can retrieve exact symbols, file outlines, HTTP routes, callers, callees, text matches, semantic matches, token-budgeted context packs, and repo summaries without reading whole files first.
 
 ### What problem does SymDex solve for AI coding agents?
 
