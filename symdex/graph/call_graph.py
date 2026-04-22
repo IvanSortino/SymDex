@@ -131,6 +131,17 @@ def extract_edges(
         (repo, file_path),
     )
 
+    missing_kind_count = sum(
+        1 for sym in symbols if sym.get("id") is not None and "kind" not in sym
+    )
+    if missing_kind_count:
+        logger.warning(
+            "Call graph extraction for %s skipped %d symbol row(s) missing required 'kind'; "
+            "ensure indexer symbol queries include kind.",
+            file_path,
+            missing_kind_count,
+        )
+
     for sym in symbols:
         sym_id = sym.get("id")
         if sym_id is None:
